@@ -19,7 +19,7 @@ still recognise Italian chapter/part headings on purpose.)
 
 This repo is the **public template**, extracted on 2026-10-09 from the owner's
 private instance. It ships with one invented course and one demo book. It has
-a few local commits, no remote, no Vercel project and no Blob store yet.
+its GitHub remote (`origin`), but no Vercel project and no Blob store yet.
 
 ## Layout
 
@@ -115,7 +115,8 @@ details for each step. The app is about **books only**.
 0. Translate everything to English. Done 2026-10-09.
    - 0.1 Three sample books in `examples/books/`; the movie-specific
      `'analysis'` source kind removed. Done 2026-10-09.
-1. Publish on GitHub: `dpakkia/inkbeacon`, public, MIT `LICENSE`.
+1. Publish on GitHub. Done 2026-10-09: https://github.com/dpakkia/inkbeacon
+   (public, MIT).
 2. Audio player for studying: playlists and live streams from YouTube, built
    into the code, played through a hidden embed. Check YouTube's embed terms
    first.

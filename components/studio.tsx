@@ -70,7 +70,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { SOURCE_IDS, type Course, type Source } from '@/lib/courses';
+import type { Course, Source } from '@/lib/courses';
+import type {
+  ReadingBlock,
+  ReadingCollection,
+  ReadingUnit,
+} from '@/lib/reading-format';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 type StudySourceId = string;
@@ -120,43 +125,6 @@ type FreeScheme = {
   title: string;
   createdAt: string;
   updatedAt: string;
-};
-
-type ReadingBlock = {
-  kind:
-    | 'paragraph'
-    | 'heading'
-    | 'list'
-    | 'quote'
-    | 'caption'
-    | 'image'
-    | 'video';
-  text?: string;
-  src?: string;
-  alt?: string;
-  /** YouTube id, when the video isn't hosted with the book. */
-  youtubeId?: string;
-};
-
-type ReadingUnit = {
-  id: string;
-  chapter: number;
-  section: number;
-  groupId?: string;
-  location: string;
-  chapterLabel: string;
-  heading: string;
-  author?: string;
-  blocks: ReadingBlock[];
-};
-
-type ReadingCollection = {
-  version: 1;
-  title: string;
-  author: string;
-  chapterCount: number;
-  unitCount: number;
-  units: ReadingUnit[];
 };
 
 type StudyStatePayload = {
@@ -211,29 +179,30 @@ const COLOR_BUTTONS: Array<{
   { color: 'coral', label: 'Coral', className: 'bg-[#e9a18a]' },
 ];
 
-const EMPTY_HIGHLIGHTS: HighlightStore = Object.fromEntries(
-  SOURCE_IDS.map((id) => [id, [] as Highlight[]]),
-);
+const emptyHighlights = (ids: string[]): HighlightStore =>
+  Object.fromEntries(ids.map((id) => [id, [] as Highlight[]]));
 
-const EMPTY_PROGRESS: ProgressStore = Object.fromEntries(
-  SOURCE_IDS.map((id) => [id, 0]),
-);
+const emptyProgress = (ids: string[]): ProgressStore =>
+  Object.fromEntries(ids.map((id) => [id, 0]));
 
-const EMPTY_COMPLETED: CompletedStore = Object.fromEntries(
-  SOURCE_IDS.map((id) => [id, [] as string[]]),
-);
+const emptyCompleted = (ids: string[]): CompletedStore =>
+  Object.fromEntries(ids.map((id) => [id, [] as string[]]));
 
 // The browser may hold a localStorage written when there were three sources:
 // that store has no keys for the books added later, and using it as is blows
 // up the first `completedUnits[source].includes(...)`.
 // The registry decides the keys; the saved data fills the ones it knows.
-function perSource<T>(saved: unknown, empty: () => T): Record<string, T> {
+function perSource<T>(
+  ids: string[],
+  saved: unknown,
+  empty: () => T,
+): Record<string, T> {
   const record =
     saved && typeof saved === 'object' && !Array.isArray(saved)
       ? (saved as Record<string, unknown>)
       : {};
   return Object.fromEntries(
-    SOURCE_IDS.map((id) => [id, (record[id] as T | undefined) ?? empty()]),
+    ids.map((id) => [id, (record[id] as T | undefined) ?? empty()]),
   );
 }
 
@@ -253,11 +222,12 @@ const SYNC_LABELS: Record<SyncStatus, string> = {
 };
 
 function mergeHighlights(
+  ids: string[],
   server: HighlightStore,
   cached: HighlightStore,
 ): HighlightStore {
   return Object.fromEntries(
-    SOURCE_IDS.map((sourceId) => {
+    ids.map((sourceId) => {
       const unique = new Map<string, Highlight>();
       for (const storedHighlight of [
         ...(server[sourceId] ?? []),
@@ -273,11 +243,12 @@ function mergeHighlights(
 }
 
 function mergeCompletedUnits(
+  ids: string[],
   server: CompletedStore,
   cached: CompletedStore,
 ): CompletedStore {
   return Object.fromEntries(
-    SOURCE_IDS.map((sourceId) => [
+    ids.map((sourceId) => [
       sourceId,
       [...new Set([...(server[sourceId] ?? []), ...(cached[sourceId] ?? [])])],
     ]),
@@ -317,9 +288,12 @@ function loadJson<T>(key: string, fallback: T): T {
 export default function Studio({
   course,
   source: initialSource,
+  sourceIds,
 }: {
   course: Course;
   source: Source;
+  /** Every book in the registry, not only this course's: study data is shared. */
+  sourceIds: string[];
 }) {
   const router = useRouter();
 
@@ -338,18 +312,23 @@ export default function Studio({
   const isMobile = useIsMobile();
   const readerRef = useRef<HTMLElement>(null);
   const diagramCounter = useRef(0);
-  const highlightStoreRef = useRef<HighlightStore>(EMPTY_HIGHLIGHTS);
-  const progressRef = useRef<ProgressStore>(EMPTY_PROGRESS);
-  const completedStoreRef = useRef<CompletedStore>(EMPTY_COMPLETED);
+  // fixed for the life of the page: a book added meanwhile shows up on reload
+  const [ids] = useState(sourceIds);
+  const highlightStoreRef = useRef<HighlightStore>(emptyHighlights(ids));
+  const progressRef = useRef<ProgressStore>(emptyProgress(ids));
+  const completedStoreRef = useRef<CompletedStore>(emptyCompleted(ids));
   const freeSchemesRef = useRef<FreeScheme[]>([]);
   const mermaidStoreRef = useRef<MermaidStore>(DEFAULT_MERMAID_BY_CHAPTER);
   const sourceIdRef = useRef<SourceId>(initialSource.id);
   const serverReadyRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [sourceId, setSourceId] = useState<SourceId>(initialSource.id);
-  const [progress, setProgress] = useState<ProgressStore>(EMPTY_PROGRESS);
-  const [completedUnits, setCompletedUnits] =
-    useState<CompletedStore>(EMPTY_COMPLETED);
+  const [progress, setProgress] = useState<ProgressStore>(() =>
+    emptyProgress(ids),
+  );
+  const [completedUnits, setCompletedUnits] = useState<CompletedStore>(() =>
+    emptyCompleted(ids),
+  );
   const [freeSchemes, setFreeSchemes] = useState<FreeScheme[]>([]);
   const [activeFreeSchemeId, setActiveFreeSchemeId] = useState('');
   const [schemeDialogOpen, setSchemeDialogOpen] = useState(false);
@@ -453,6 +432,8 @@ export default function Studio({
           completedUnits: completedStoreRef.current,
           freeSchemes: freeSchemesRef.current,
           mermaidByChapter: mermaidStoreRef.current,
+          // the server keeps its data for books this page doesn't know
+          knownSources: ids,
         }),
       });
       if (response.status === 401) {
@@ -465,7 +446,7 @@ export default function Studio({
     } catch {
       setSyncStatus('error');
     }
-  }, []);
+  }, [ids]);
 
   const queueServerSave = useCallback(() => {
     if (!serverReadyRef.current) return;
@@ -484,11 +465,12 @@ export default function Studio({
       if (!response.ok) throw new Error('Server load failed');
       const payload = (await response.json()) as StudyStatePayload;
       const mergedHighlights = mergeHighlights(
+        ids,
         payload.highlights,
         highlightStoreRef.current,
       );
       const mergedProgress = Object.fromEntries(
-        SOURCE_IDS.map((id) => [
+        ids.map((id) => [
           id,
           // without the defaults, an id unknown to either side would give NaN,
           // which the server then rejects as non-integer progress
@@ -496,7 +478,8 @@ export default function Studio({
         ]),
       ) as ProgressStore;
       const mergedCompletedUnits = mergeCompletedUnits(
-        payload.completedUnits ?? EMPTY_COMPLETED,
+        ids,
+        payload.completedUnits ?? emptyCompleted(ids),
         completedStoreRef.current,
       );
       const mergedFreeSchemes = mergeFreeSchemes(
@@ -512,7 +495,7 @@ export default function Studio({
           JSON.stringify(payload.highlights) ||
         JSON.stringify(mergedProgress) !== JSON.stringify(payload.progress) ||
         JSON.stringify(mergedCompletedUnits) !==
-          JSON.stringify(payload.completedUnits ?? EMPTY_COMPLETED) ||
+          JSON.stringify(payload.completedUnits ?? emptyCompleted(ids)) ||
         JSON.stringify(mergedFreeSchemes) !==
           JSON.stringify(payload.freeSchemes ?? []) ||
         JSON.stringify(mergedMermaid) !==
@@ -549,17 +532,19 @@ export default function Studio({
       serverReadyRef.current = false;
       setSyncStatus('error');
     }
-  }, [persistServerState]);
+  }, [ids, persistServerState]);
 
   /* oxlint-disable react/react-compiler -- browser-only persisted state hydrates after mount */
   useEffect(() => {
     const cachedProgress = perSource<number>(
+      ids,
       loadJson<unknown>('studio:progress', null),
       () => 0,
     ) as ProgressStore;
     progressRef.current = cachedProgress;
     setProgress(cachedProgress);
     const cachedCompleted = perSource<string[]>(
+      ids,
       loadJson<unknown>('studio:completed-units', null),
       () => [],
     ) as CompletedStore;
@@ -570,7 +555,7 @@ export default function Studio({
     setFreeSchemes(cachedFreeSchemes);
     setActiveFreeSchemeId(cachedFreeSchemes[0]?.id ?? '');
     const cachedHighlights = Object.fromEntries(
-      SOURCE_IDS.map((id) => [
+      ids.map((id) => [
         id,
         loadJson<Highlight[]>(`studio:highlights:${id}`, []),
       ]),
@@ -590,7 +575,7 @@ export default function Studio({
       document.documentElement.classList.contains('dark') ? 'dark' : 'light',
     );
     setHasLoaded(true);
-  }, []);
+  }, [ids]);
   /* oxlint-enable react/react-compiler */
 
   useEffect(() => {

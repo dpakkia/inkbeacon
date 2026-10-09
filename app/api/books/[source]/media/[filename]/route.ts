@@ -1,6 +1,7 @@
 import { get } from '@vercel/blob';
 
 import { findSource } from '@/lib/courses';
+import { readRegistry } from '@/lib/registry';
 import {
   hasStudioSession,
   isBlobConfigured,
@@ -25,17 +26,20 @@ export async function GET(
   }
 
   const { source, filename } = await context.params;
-  if (!findSource(source)?.readable) {
-    return new Response('Unknown source.', { status: 404 });
-  }
   if (!VALID_NAME.test(filename) || !filename.startsWith(`${source}-`)) {
     return new Response('Invalid file.', { status: 400 });
   }
 
   try {
+    if (!findSource(await readRegistry(), source)?.readable) {
+      return new Response('Unknown source.', { status: 404 });
+    }
+
     const result = await get(`studio/books/${source}/media/${filename}`, {
       access: 'private',
-      useCache: true,
+      // straight from storage: a book deleted and uploaded again under the
+      // same id must not come back from the CDN cache
+      useCache: false,
     });
     if (!result || result.statusCode !== 200) {
       return new Response('Media not found.', { status: 404 });

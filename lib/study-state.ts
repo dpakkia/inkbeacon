@@ -8,7 +8,12 @@
 
 import { get, put } from '@vercel/blob';
 
-import { SOURCE_IDS, SOURCE_TOTALS } from '@/lib/courses';
+import {
+  allSources,
+  isValidSourceId,
+  sourceIds,
+  type Registry,
+} from '@/lib/courses';
 
 const STORAGE_PATH = 'studio/state.json';
 const LEGACY_HIGHLIGHTS_PATH = 'studio/highlights.json';
@@ -45,31 +50,63 @@ export type StudyState = {
   updatedAt: string;
 };
 
-export function emptyState(): StudyState {
+/**
+ * What the parser needs to know about the registry: the books it lists, their
+ * totals, and the ids deleted on purpose.
+ */
+export type StateScope = {
+  ids: string[];
+  totals: Record<string, number>;
+  deleted: Set<string>;
+};
+
+export function scopeOf(registry: Registry): StateScope {
+  return {
+    ids: sourceIds(registry),
+    totals: Object.fromEntries(
+      allSources(registry).map((s) => [s.id, s.total]),
+    ),
+    deleted: new Set(registry.deleted),
+  };
+}
+
+export function emptyState(scope: StateScope): StudyState {
   return {
     version: 4,
-    highlights: Object.fromEntries(SOURCE_IDS.map((id) => [id, []])),
-    progress: Object.fromEntries(SOURCE_IDS.map((id) => [id, 0])),
-    completedUnits: Object.fromEntries(SOURCE_IDS.map((id) => [id, []])),
+    highlights: Object.fromEntries(scope.ids.map((id) => [id, []])),
+    progress: Object.fromEntries(scope.ids.map((id) => [id, 0])),
+    completedUnits: Object.fromEntries(scope.ids.map((id) => [id, []])),
     freeSchemes: [],
     mermaidByChapter: {},
     updatedAt: new Date(0).toISOString(),
   };
 }
 
-// The source registry grows over time. A state written when there were three
-// books knows nothing about the ones added later: if a missing source made the
-// whole document invalid, adding a book would wipe the study done on the
-// others. So each source is read on its own, and a missing one falls back to
-// its empty value.
+// The source registry changes over time. A state written when there were
+// three books knows nothing about the ones added later: if a missing source
+// made the whole document invalid, adding a book would wipe the study done on
+// the others. So each source is read on its own, and a missing one falls back
+// to its empty value.
+// The reverse holds too: data for an id the registry doesn't list is kept, not
+// dropped, unless that id was deleted on purpose. A registry read that went
+// wrong must never cost study data.
+function keysOf(record: Record<string, unknown>, scope: StateScope) {
+  const keys = new Set(scope.ids);
+  for (const key of Object.keys(record).slice(0, 2_000)) {
+    if (isValidSourceId(key)) keys.add(key);
+  }
+  return [...keys].filter((key) => !scope.deleted.has(key));
+}
+
 function parseCompletedUnits(
   value: unknown,
+  scope: StateScope,
 ): Record<SourceId, string[]> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   const result = {} as Record<SourceId, string[]>;
 
-  for (const sourceId of SOURCE_IDS) {
+  for (const sourceId of keysOf(record, scope)) {
     const units = record[sourceId];
     result[sourceId] =
       Array.isArray(units) &&
@@ -118,17 +155,23 @@ function parseFreeSchemes(value: unknown): StoredFreeScheme[] | null {
   return result;
 }
 
-function parseMermaidStore(value: unknown): MermaidStore | null {
+function parseMermaidStore(
+  value: unknown,
+  scope: StateScope,
+): MermaidStore | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const entries = Object.entries(value as Record<string, unknown>);
-  if (entries.length > 500) return null;
+  // one entry per chapter of every book, plus the free diagrams
+  if (entries.length > 10_000) return null;
 
   let totalLength = 0;
   const result: MermaidStore = {};
   for (const [key, code] of entries) {
     if (!key || key.length > 120 || typeof code !== 'string') return null;
+    // keys are `<source>:<chapter>` or `free:<scheme>`
+    if (scope.deleted.has(key.split(':')[0])) continue;
     totalLength += code.length;
-    if (code.length > 100_000 || totalLength > 2_000_000) return null;
+    if (code.length > 100_000 || totalLength > 10_000_000) return null;
     result[key] = code;
   }
   return result;
@@ -156,12 +199,13 @@ function isHighlight(value: unknown): value is StoredHighlight {
 
 function parseHighlights(
   value: unknown,
+  scope: StateScope,
 ): Record<SourceId, StoredHighlight[]> | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
   const result = {} as Record<SourceId, StoredHighlight[]>;
 
-  for (const sourceId of SOURCE_IDS) {
+  for (const sourceId of keysOf(record, scope)) {
     const highlights = record[sourceId];
     result[sourceId] =
       Array.isArray(highlights) &&
@@ -173,33 +217,45 @@ function parseHighlights(
   return result;
 }
 
-function parseProgress(value: unknown): Record<SourceId, number> | null {
+function parseProgress(
+  value: unknown,
+  scope: StateScope,
+): Record<SourceId, number> | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
   const result = {} as Record<SourceId, number>;
 
-  for (const sourceId of SOURCE_IDS) {
+  for (const sourceId of keysOf(record, scope)) {
     const progress = record[sourceId];
     // a re-imported book can have more or fewer units than before: the
     // bookmark is clamped to the last page that exists now, not lost
     result[sourceId] = Number.isInteger(progress)
-      ? Math.min(Math.max(Number(progress), 0), SOURCE_TOTALS[sourceId] ?? 0)
+      ? Math.min(
+          Math.max(Number(progress), 0),
+          scope.totals[sourceId] ?? 100_000,
+        )
       : 0;
   }
   return result;
 }
 
-export function parseState(value: unknown): StudyState | null {
+export function parseState(
+  value: unknown,
+  scope: StateScope,
+): StudyState | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Partial<StudyState>;
-  const highlights = parseHighlights(record.highlights);
-  const progress = parseProgress(record.progress);
+  const highlights = parseHighlights(record.highlights, scope);
+  const progress = parseProgress(record.progress, scope);
   // `?? {}` rather than a hand-written list: the registry decides the keys
-  const completedUnits = parseCompletedUnits(record.completedUnits ?? {});
+  const completedUnits = parseCompletedUnits(
+    record.completedUnits ?? {},
+    scope,
+  );
   const freeSchemes = record.freeSchemes
     ? parseFreeSchemes(record.freeSchemes)
     : [];
-  const mermaidByChapter = parseMermaidStore(record.mermaidByChapter);
+  const mermaidByChapter = parseMermaidStore(record.mermaidByChapter, scope);
   if (
     !highlights ||
     !progress ||
@@ -228,16 +284,16 @@ async function readBlob(pathname: string) {
   return (await new Response(result.stream).json()) as unknown;
 }
 
-export async function readState() {
-  const stored = parseState(await readBlob(STORAGE_PATH));
+export async function readState(scope: StateScope) {
+  const stored = parseState(await readBlob(STORAGE_PATH), scope);
   if (stored) return { ...stored, initialized: true };
 
-  const state = emptyState();
+  const state = emptyState(scope);
   const legacy = (await readBlob(LEGACY_HIGHLIGHTS_PATH)) as {
     highlights?: unknown;
     updatedAt?: unknown;
   } | null;
-  const legacyHighlights = parseHighlights(legacy?.highlights);
+  const legacyHighlights = parseHighlights(legacy?.highlights, scope);
   if (legacyHighlights) {
     state.highlights = legacyHighlights;
     if (typeof legacy?.updatedAt === 'string')
@@ -254,4 +310,21 @@ export async function writeState(state: StudyState) {
     cacheControlMaxAge: 60,
     contentType: 'application/json',
   });
+}
+
+/** The state without one book's highlights, progress, ticks and diagrams. */
+export function withoutSource(state: StudyState, id: string): StudyState {
+  const drop = <T>(record: Record<string, T>) =>
+    Object.fromEntries(Object.entries(record).filter(([key]) => key !== id));
+  return {
+    ...state,
+    highlights: drop(state.highlights),
+    progress: drop(state.progress),
+    completedUnits: drop(state.completedUnits),
+    mermaidByChapter: Object.fromEntries(
+      Object.entries(state.mermaidByChapter).filter(
+        ([key]) => key.split(':')[0] !== id,
+      ),
+    ),
+  };
 }

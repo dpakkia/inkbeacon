@@ -1,6 +1,7 @@
 import { get } from '@vercel/blob';
 
 import { findSource } from '@/lib/courses';
+import { readRegistry } from '@/lib/registry';
 import {
   hasStudioSession,
   isBlobConfigured,
@@ -26,15 +27,17 @@ export async function GET(
 
   const { source } = await context.params;
   // the registry is also the list of what may be requested
-  const entry = findSource(source);
-  if (!entry?.readable) {
-    return Response.json({ error: 'Unknown source.' }, { status: 404 });
-  }
-
   try {
+    const entry = findSource(await readRegistry(), source);
+    if (!entry?.readable) {
+      return Response.json({ error: 'Unknown source.' }, { status: 404 });
+    }
+
     const result = await get(`studio/books/${source}/book.json`, {
       access: 'private',
-      useCache: true,
+      // straight from storage: a book deleted and uploaded again under the
+      // same id must not come back from the CDN cache
+      useCache: false,
     });
     if (!result || result.statusCode !== 200) {
       return Response.json({ error: 'Book not found.' }, { status: 404 });

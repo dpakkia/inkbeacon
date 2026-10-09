@@ -1,12 +1,14 @@
 /**
- * Registry of courses and their sources.
+ * Courses and their sources: types, validation and the seed.
  *
- * Single source of truth: the ids used to be repeated in the page, in the
- * study-state route and in one route per book. Adding a course now means
- * touching this file only.
+ * The live list is the registry document in Blob (`lib/registry.ts`), edited
+ * from the library page. `SEED_COURSES` only fills it the first time, when no
+ * registry exists yet: editing it afterwards changes nothing. This file has
+ * no server imports, so the browser can use the same validation.
  */
 
 export type SourceKind = 'book' | 'diagrams';
+export type SourceUnit = 'chapters' | 'pages';
 
 export type Source = {
   id: string;
@@ -14,8 +16,8 @@ export type Source = {
   shortTitle: string;
   title: string;
   author: string;
-  /** Name of the progress unit: chapters or pages. */
-  unit: string;
+  /** Progress unit. With pages, progress is moved by hand. */
+  unit: SourceUnit | 'diagrams';
   total: number;
   /** true when the full text exists and can be read in the app. */
   readable: boolean;
@@ -28,7 +30,18 @@ export type Course = {
   sources: Source[];
 };
 
-export const COURSES: Course[] = [
+export type Registry = {
+  version: 1;
+  courses: Course[];
+  /**
+   * Ids of deleted books. A tab opened before the deletion could otherwise
+   * save their study data back.
+   */
+  deleted: string[];
+  updatedAt: string;
+};
+
+export const SEED_COURSES: Course[] = [
   {
     slug: 'example-course',
     name: 'Example course',
@@ -76,27 +89,161 @@ export const COURSES: Course[] = [
   },
 ];
 
-export const ALL_SOURCES: Source[] = COURSES.flatMap(
-  (course) => course.sources,
-);
-
-export const SOURCE_IDS: string[] = ALL_SOURCES.map((source) => source.id);
-
-export const SOURCE_TOTALS: Record<string, number> = Object.fromEntries(
-  ALL_SOURCES.map((source) => [source.id, source.total]),
-);
-
-export function findCourse(slug: string): Course | undefined {
-  return COURSES.find((course) => course.slug === slug);
+export function seedRegistry(): Registry {
+  return {
+    version: 1,
+    courses: structuredClone(SEED_COURSES),
+    deleted: [],
+    updatedAt: new Date(0).toISOString(),
+  };
 }
 
-export function findSource(id: string): Source | undefined {
-  return ALL_SOURCES.find((source) => source.id === id);
+/** Book ids end up in URLs, Blob paths and media file names. */
+export const SOURCE_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
+export const COURSE_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/;
+/** Ids the app uses for itself: a book can't take them. */
+const RESERVED_IDS = new Set(['free', 'library', 'api']);
+
+export function isValidSourceId(id: string) {
+  return SOURCE_ID_PATTERN.test(id) && !RESERVED_IDS.has(id);
 }
 
-/** Course a source belongs to, for building links and breadcrumbs. */
-export function courseOfSource(sourceId: string): Course | undefined {
-  return COURSES.find((course) =>
-    course.sources.some((s) => s.id === sourceId),
-  );
+export function isValidCourseSlug(slug: string) {
+  return COURSE_SLUG_PATTERN.test(slug) && !RESERVED_IDS.has(slug);
+}
+
+/** A lowercase, dash-separated id from a title: "Dune (1965)" -> "dune-1965". */
+export function slugify(text: string, maxLength = 40) {
+  return text
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .slice(0, maxLength)
+    .replace(/^-+|-+$/g, '');
+}
+
+function text(value: unknown, max: number, allowEmpty = false) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (trimmed.length > max || (!allowEmpty && !trimmed)) return null;
+  return trimmed;
+}
+
+function parseSource(value: unknown): Source | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const item = value as Record<string, unknown>;
+  const id = typeof item.id === 'string' ? item.id : '';
+  const title = text(item.title, 200);
+  const shortTitle = text(item.shortTitle, 60);
+  const author = text(item.author, 200, true);
+  const unit = item.unit;
+  const total = item.total;
+  if (
+    !isValidSourceId(id) ||
+    item.kind !== 'book' ||
+    title === null ||
+    shortTitle === null ||
+    author === null ||
+    (unit !== 'chapters' && unit !== 'pages') ||
+    !Number.isInteger(total) ||
+    (total as number) < 0 ||
+    (total as number) > 100_000 ||
+    typeof item.readable !== 'boolean'
+  ) {
+    return null;
+  }
+  return {
+    id,
+    kind: 'book',
+    title,
+    shortTitle,
+    author,
+    unit,
+    total: total as number,
+    readable: item.readable,
+  };
+}
+
+function parseCourse(value: unknown): Course | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const item = value as Record<string, unknown>;
+  const slug = typeof item.slug === 'string' ? item.slug : '';
+  const name = text(item.name, 120);
+  const description = text(item.description, 400, true);
+  if (
+    !isValidCourseSlug(slug) ||
+    name === null ||
+    description === null ||
+    !Array.isArray(item.sources) ||
+    item.sources.length > 500
+  ) {
+    return null;
+  }
+  const sources: Source[] = [];
+  for (const raw of item.sources) {
+    const source = parseSource(raw);
+    if (!source) return null;
+    sources.push(source);
+  }
+  return { slug, name, description, sources };
+}
+
+/** Validates a registry document; null if anything in it is malformed. */
+export function parseRegistry(value: unknown): Registry | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const item = value as Record<string, unknown>;
+  if (item.version !== 1 || !Array.isArray(item.courses)) return null;
+  if (item.courses.length > 200) return null;
+
+  const courses: Course[] = [];
+  const slugs = new Set<string>();
+  const ids = new Set<string>();
+  for (const raw of item.courses) {
+    const course = parseCourse(raw);
+    if (!course || slugs.has(course.slug)) return null;
+    slugs.add(course.slug);
+    for (const source of course.sources) {
+      if (ids.has(source.id)) return null;
+      ids.add(source.id);
+    }
+    courses.push(course);
+  }
+
+  const deleted = Array.isArray(item.deleted)
+    ? [
+        ...new Set(
+          item.deleted.filter(
+            (id): id is string =>
+              typeof id === 'string' && isValidSourceId(id) && !ids.has(id),
+          ),
+        ),
+      ].slice(-2_000)
+    : [];
+
+  return {
+    version: 1,
+    courses,
+    deleted,
+    updatedAt:
+      typeof item.updatedAt === 'string' && item.updatedAt.length <= 40
+        ? item.updatedAt
+        : new Date(0).toISOString(),
+  };
+}
+
+export function allSources(registry: Registry): Source[] {
+  return registry.courses.flatMap((course) => course.sources);
+}
+
+export function sourceIds(registry: Registry): string[] {
+  return allSources(registry).map((source) => source.id);
+}
+
+export function findCourse(registry: Registry, slug: string) {
+  return registry.courses.find((course) => course.slug === slug);
+}
+
+export function findSource(registry: Registry, id: string) {
+  return allSources(registry).find((source) => source.id === id);
 }

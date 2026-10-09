@@ -64,6 +64,9 @@ is published on GitHub (`origin`) and deployed on Vercel (see "Infrastructure").
   a source missing from a stored document falls back to its empty value.
   Data for an id the registry doesn't list is kept, not dropped; only ids in
   `deleted` are removed. A registry problem must never cost study data.
+  A stored `studio/state.json` that fails validation is **refused**
+  (`UnreadableStateError`, HTTP 500), never treated as empty: every `PUT`
+  reads the stored document first, so nothing can overwrite it.
   Preserve these properties in any change to `lib/study-state.ts`. The stored
   field names and `studio:*` keys were already English before the
   translation and were deliberately left unchanged.

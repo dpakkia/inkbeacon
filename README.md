@@ -15,11 +15,14 @@ Built with Next.js, Tailwind and Vercel Blob.
 
 ## How it works
 
-- **Courses and sources** are listed in `lib/courses.ts`. It's the only file to
-  touch to add a course or a book.
-- **Books** don't live in the repository: they're converted to JSON locally
-  and uploaded to a private Vercel Blob store. The app downloads them only
-  after you've entered the key.
+- **Courses and books** are managed from the **Library** page (`/library`):
+  add a book, edit titles and courses, move or delete books. The list is
+  stored in the private store (`studio/registry.json`); `lib/courses.ts` only
+  fills it the first time.
+- **Books** don't live in the repository. The library page converts an EPUB
+  or a single-file HTML export in your browser and uploads it straight to a
+  private Vercel Blob store. The app shows a book only after you've entered
+  the key.
 - **Your study** (highlights, diagrams, progress) is saved to the same store,
   in `studio/state.json`.
 - **`GET /api/progress`** returns the percentages per course, with
@@ -43,33 +46,35 @@ variables on Vercel too.
 
 ## Adding a book
 
-1. Add the source to `lib/courses.ts`, with a short `id` (for example
-   `example`).
-2. Convert the book to the reading format, inside `data-private/` (which git
-   ignores):
+Open **Library** (linked from the home page), enter the key, choose an EPUB
+or a single-file HTML export (Calibre style: the `.html` alone, or a `.zip` of
+its folder to keep the images), check the title, author and course, and press
+**Convert and upload**. Chapter and part headings are recognised in English
+("Chapter 3", "Part II") and Italian ("Capitolo 3", "Parte II").
 
-   ```bash
-   # from an EPUB
-   python3 scripts/import-epub.py book.epub --id example \
-       --title "Title" --author "Author"
-   # from a single-file HTML export (Calibre style)
-   python3 scripts/import-single-html.py folder/ --id example \
-       --title "Title" --author "Author"
-   ```
+Deleting a book from the library removes its text, images, highlights,
+diagrams and progress, after you type its id to confirm.
 
-   Chapter and part headings are recognised in English ("Chapter 3",
-   "Part II") and Italian ("Capitolo 3", "Parte II").
+### From the command line
 
-3. Upload it to the store:
+For bulk imports, the same conversion runs in Python, into `data-private/`
+(which git ignores), and a script uploads the result:
 
-   ```bash
-   node --env-file=.env.local scripts/upload-book.mjs example
-   ```
+```bash
+python3 scripts/import-epub.py book.epub --id my-book \
+    --title "Title" --author "Author"
+python3 scripts/import-single-html.py folder/ --id my-book \
+    --title "Title" --author "Author"
 
-To try it straight away, `examples/books/` holds three small demo books
-already in the right format, matching the two example courses in
-`lib/courses.ts`. `slow-reading` counts progress in pages, which you move by
-hand.
+node --env-file=.env.local scripts/upload-book.mjs my-book --course example-course
+```
+
+`--pages 240` tracks progress in pages instead of chapters. Without
+`--course` the files are uploaded but the book isn't added to the library
+(useful to replace the text of a book that's already there).
+
+The three demo books in `examples/books/` match the example courses; to load
+them into a new store:
 
 ```bash
 mkdir -p data-private/books

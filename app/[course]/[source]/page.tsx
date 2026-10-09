@@ -1,16 +1,10 @@
 import { notFound } from 'next/navigation';
 
 import Studio from '@/components/studio';
-import { COURSES, findCourse, type Source } from '@/lib/courses';
+import { findCourse, sourceIds, type Source } from '@/lib/courses';
+import { readRegistry } from '@/lib/registry';
 
-export function generateStaticParams() {
-  return COURSES.flatMap((course) =>
-    [...course.sources.map((s) => s.id), 'free'].map((source) => ({
-      course: course.slug,
-      source,
-    })),
-  );
-}
+export const dynamic = 'force-dynamic';
 
 /** Not a book: free diagrams exist in every course. */
 const FREE_DIAGRAMS: Source = {
@@ -30,7 +24,8 @@ export default async function SourcePage({
   params: Promise<{ course: string; source: string }>;
 }) {
   const { course: slug, source: sourceId } = await params;
-  const course = findCourse(slug);
+  const registry = await readRegistry();
+  const course = findCourse(registry, slug);
   if (!course) notFound();
 
   const source =
@@ -39,5 +34,7 @@ export default async function SourcePage({
       : course.sources.find((s) => s.id === sourceId);
   if (!source) notFound();
 
-  return <Studio course={course} source={source} />;
+  return (
+    <Studio course={course} source={source} sourceIds={sourceIds(registry)} />
+  );
 }

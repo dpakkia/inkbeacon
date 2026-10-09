@@ -22,6 +22,7 @@ import sys
 import zipfile
 from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import unquote
 
 BLOCK_TAGS = {
     'h1': 'heading', 'h2': 'heading', 'h3': 'heading', 'h4': 'heading',
@@ -232,7 +233,11 @@ def main() -> int:
             if '_media' not in b:
                 final.append(b)
                 continue
-            target = posixpath.normpath(posixpath.join(posixpath.dirname(rel), b['_media']))
+            target = posixpath.normpath(posixpath.join(
+                posixpath.dirname(rel), re.split(r'[?#]', b['_media'])[0]))
+            # hrefs may be URL-encoded ("pic%201.png" for "pic 1.png")
+            if not src.exists(target) and src.exists(unquote(target)):
+                target = unquote(target)
             ext = target.rsplit('.', 1)[-1].lower()
             if ext not in MEDIA_EXT or not src.exists(target):
                 continue

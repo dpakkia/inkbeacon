@@ -1,9 +1,13 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { COURSES } from '@/lib/courses';
+import { readRegistry } from '@/lib/registry';
 
-export default function Home() {
+// the course list lives in Blob and changes from the library page
+export const dynamic = 'force-dynamic';
+
+export default async function Home() {
+  const { courses } = await readRegistry();
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-6 py-16 font-ui text-ink md:py-24">
       <div className="flex items-center gap-4 md:gap-5">
@@ -25,7 +29,7 @@ export default function Home() {
       </p>
 
       <ul className="mt-12 space-y-3">
-        {COURSES.map((course) => {
+        {courses.map((course) => {
           const books = course.sources.filter((s) => s.kind === 'book').length;
           return (
             <li key={course.slug}>
@@ -49,6 +53,13 @@ export default function Home() {
           );
         })}
       </ul>
+
+      <Link
+        href="/library"
+        className="mt-8 inline-block text-sm text-muted-ink underline-offset-4 transition-colors hover:text-ink hover:underline"
+      >
+        Manage the library: add, edit or delete books →
+      </Link>
     </main>
   );
 }

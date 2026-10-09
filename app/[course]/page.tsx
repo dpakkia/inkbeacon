@@ -1,16 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { COURSES, findCourse } from '@/lib/courses';
+import { findCourse } from '@/lib/courses';
+import { readRegistry } from '@/lib/registry';
 
-export function generateStaticParams() {
-  return COURSES.map((course) => ({ course: course.slug }));
-}
-
-const KIND_LABEL = {
-  book: 'Text',
-  diagrams: 'Diagrams',
-} as const;
+export const dynamic = 'force-dynamic';
 
 export default async function CoursePage({
   params,
@@ -18,7 +12,7 @@ export default async function CoursePage({
   params: Promise<{ course: string }>;
 }) {
   const { course: slug } = await params;
-  const course = findCourse(slug);
+  const course = findCourse(await readRegistry(), slug);
   if (!course) notFound();
 
   return (
@@ -47,7 +41,7 @@ export default async function CoursePage({
                   {source.title}
                 </h2>
                 <span className="shrink-0 text-[11px] uppercase tracking-wide text-muted-ink">
-                  {KIND_LABEL[source.kind]}
+                  Book
                 </span>
               </div>
               <p className="mt-1.5 text-sm text-muted-ink">

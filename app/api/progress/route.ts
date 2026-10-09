@@ -7,8 +7,9 @@
  * same weight as a textbook hundreds of pages long.
  */
 
-import { COURSES } from '@/lib/courses';
-import { readState } from '@/lib/study-state';
+import type { Registry } from '@/lib/courses';
+import { readRegistry } from '@/lib/registry';
+import { readState, scopeOf } from '@/lib/study-state';
 import {
   hasStudioAccess,
   isBlobConfigured,
@@ -47,9 +48,11 @@ export async function GET(request: Request) {
     return Response.json({ error: 'Access required.' }, { status: 401 });
   }
 
+  let registry: Registry;
   let state: Awaited<ReturnType<typeof readState>>;
   try {
-    state = await readState();
+    registry = await readRegistry();
+    state = await readState(scopeOf(registry));
   } catch (error) {
     console.error('Unable to read study state from Vercel Blob', error);
     return Response.json(
@@ -58,7 +61,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const courses = COURSES.map((course) => {
+  const courses = registry.courses.map((course) => {
     const sources = course.sources.map((source) => {
       const reading = share(state.progress[source.id] ?? 0, source.total);
       // ticked units survive a re-import that shortens the book: without the

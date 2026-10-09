@@ -6,10 +6,11 @@ export default function Home() {
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-6 py-16 font-ui text-ink md:py-24">
       <h1 className="font-heading text-[clamp(2rem,4vw,3rem)] font-medium leading-tight tracking-[-0.03em]">
-        Study platform
+        InkBeacon
       </h1>
       <p className="mt-3 text-muted-ink">
-        Your courses, their texts and the diagrams.
+        A beacon of light in a “content” world where reading is
+        hard-to-navigate.
       </p>
 
       <ul className="mt-12 space-y-3">

@@ -278,18 +278,45 @@ export function parseState(
   };
 }
 
-async function readBlob(pathname: string) {
+/** The parsed JSON of a blob; null only when the blob doesn't exist. */
+async function readBlob(pathname: string): Promise<{ value: unknown } | null> {
   const result = await get(pathname, { access: 'private', useCache: false });
-  if (!result || result.statusCode !== 200) return null;
-  return (await new Response(result.stream).json()) as unknown;
+  if (!result) return null;
+  if (result.statusCode !== 200) {
+    throw new Error(`Unexpected response for ${pathname}`);
+  }
+  return { value: (await new Response(result.stream).json()) as unknown };
+}
+
+/**
+ * The stored document exists but isn't valid study data (hand-edited, cut
+ * off, or over a limit). Treating it as empty would let the browser save its
+ * own copy on top, losing everything stored: refuse instead, and touch
+ * nothing until someone looks at it.
+ */
+export class UnreadableStateError extends Error {
+  constructor() {
+    super(
+      'The stored study data can’t be read, so nothing was loaded or saved. ' +
+        'Check studio/state.json in the Blob store.',
+    );
+  }
+}
+
+/** A stored document as study state; throws if it exists but is invalid. */
+export function parseStoredState(value: unknown, scope: StateScope) {
+  const stored = parseState(value, scope);
+  if (!stored) throw new UnreadableStateError();
+  return { ...stored, initialized: true };
 }
 
 export async function readState(scope: StateScope) {
-  const stored = parseState(await readBlob(STORAGE_PATH), scope);
-  if (stored) return { ...stored, initialized: true };
+  const stored = await readBlob(STORAGE_PATH);
+  if (stored) return parseStoredState(stored.value, scope);
 
+  // nothing stored yet: start empty, with the highlights of the old format
   const state = emptyState(scope);
-  const legacy = (await readBlob(LEGACY_HIGHLIGHTS_PATH)) as {
+  const legacy = (await readBlob(LEGACY_HIGHLIGHTS_PATH))?.value as {
     highlights?: unknown;
     updatedAt?: unknown;
   } | null;

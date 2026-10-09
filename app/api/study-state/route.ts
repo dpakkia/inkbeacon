@@ -8,6 +8,7 @@ import {
   parseState,
   readState,
   scopeOf,
+  UnreadableStateError,
   writeState,
   type StudyState,
 } from '@/lib/study-state';
@@ -38,12 +39,20 @@ export async function GET() {
       headers: { 'Cache-Control': 'private, no-store' },
     });
   } catch (error) {
-    console.error('Unable to read study state from Vercel Blob', error);
-    return Response.json(
-      { error: 'Unable to read the study data.' },
-      { status: 502 },
-    );
+    return failure(error, 'read');
   }
+}
+
+function failure(error: unknown, action: 'read' | 'save') {
+  if (error instanceof UnreadableStateError) {
+    console.error('Stored study state is invalid; refusing to load or save');
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+  console.error(`Unable to ${action} study state on Vercel Blob`, error);
+  return Response.json(
+    { error: `Unable to ${action} the study data.` },
+    { status: 502 },
+  );
 }
 
 /**
@@ -93,27 +102,18 @@ export async function PUT(request: Request) {
           ),
         )
       : null;
-    if (
-      known ||
-      !Object.hasOwn(input, 'completedUnits') ||
-      !Object.hasOwn(input, 'freeSchemes')
-    ) {
-      const current = await readState(scope);
-      if (!Object.hasOwn(input, 'completedUnits'))
-        state.completedUnits = current.completedUnits;
-      if (!Object.hasOwn(input, 'freeSchemes'))
-        state.freeSchemes = current.freeSchemes;
-      if (known && current.initialized)
-        keepUnknownSources(state, current, known);
-    }
+    // always read what's stored first: it throws if the stored document is
+    // unreadable, so a save can never overwrite it
+    const current = await readState(scope);
+    if (!Object.hasOwn(input, 'completedUnits'))
+      state.completedUnits = current.completedUnits;
+    if (!Object.hasOwn(input, 'freeSchemes'))
+      state.freeSchemes = current.freeSchemes;
+    if (known && current.initialized) keepUnknownSources(state, current, known);
     state.updatedAt = new Date().toISOString();
     await writeState(state);
     return Response.json({ updatedAt: state.updatedAt });
   } catch (error) {
-    console.error('Unable to write study state to Vercel Blob', error);
-    return Response.json(
-      { error: 'Unable to save the study data.' },
-      { status: 502 },
-    );
+    return failure(error, 'save');
   }
 }

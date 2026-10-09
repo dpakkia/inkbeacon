@@ -1,4 +1,10 @@
+# local only: never upload with `vercel deploy` from this folder
+_privato/
+backup-stato/
 data-private/
+FIRST_TODO.md
+.env*
+!.env.example
 dist/
 work/
 outputs/

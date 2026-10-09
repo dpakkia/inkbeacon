@@ -15,18 +15,18 @@ const metadataBase = new URL(
 
 export const metadata: Metadata = {
   metadataBase,
-  title: 'Studio — reading space',
+  title: 'InkBeacon',
   description:
-    'A personal surface for reading, highlighting and turning study sources into Mermaid maps.',
+    'A beacon of light in a “content” world where reading is hard-to-navigate. Read, highlight and turn what you study into Mermaid maps.',
   openGraph: {
-    title: 'Studio',
+    title: 'InkBeacon',
     description: 'Read, highlight, build maps.',
     images: [
       {
         url: '/og.png',
         width: 1200,
         height: 630,
-        alt: 'Studio — reading space and maps',
+        alt: 'InkBeacon — read, highlight, build maps',
       },
     ],
     type: 'website',
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Studio',
+    title: 'InkBeacon',
     description: 'Read, highlight, build maps.',
     images: ['/og.png'],
   },

@@ -8,7 +8,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-# Handoff — personal reading platform
+# Handoff — InkBeacon, a personal reading platform
 
 A personal study space: read a book unit by unit, highlight sentences, build a
 Mermaid diagram per chapter, track progress per course. Study state syncs to a

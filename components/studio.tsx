@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -24,7 +25,6 @@ import {
   Code2,
   Eye,
   FilePlus2,
-  Highlighter,
   LoaderCircle,
   LockKeyhole,
   Minus,
@@ -1742,9 +1742,9 @@ export default function Studio({
             <Link
               href="/"
               aria-label="All courses"
-              className="flex size-9 items-center justify-center rounded-xl bg-[#292b2a] text-[#f6e7a8] shadow-sm transition-opacity hover:opacity-80 dark:bg-[#0f100f]"
+              className="flex size-9 shrink-0 overflow-hidden rounded-[22%] shadow-sm transition-opacity hover:opacity-80"
             >
-              <Highlighter className="size-[17px]" />
+              <Image src="/icon.svg" alt="" width={36} height={36} priority />
             </Link>
             <div className="hidden sm:block">
               <Link

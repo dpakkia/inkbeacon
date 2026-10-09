@@ -101,6 +101,9 @@ There are no tests. Verify UI changes in a browser, logged out and logged in.
 
 ## Open items
 
+Start from `FIRST_TODO.md` (local, gitignored) if it exists.
+
+
 1. Create the GitHub repo and push (owner: `dpakkia`; visibility and name not
    decided yet — ask).
 2. Own Vercel project + private Blob store + new `STUDIO_ACCESS_KEY` for this

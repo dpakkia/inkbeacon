@@ -49,3 +49,6 @@ next-env.d.ts
 __pycache__/
 *.pyc
 tsconfig.tsbuildinfo
+
+# promemoria locale per il prossimo agente
+/FIRST_TODO.md

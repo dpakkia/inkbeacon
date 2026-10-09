@@ -19,7 +19,7 @@ still recognise Italian chapter/part headings on purpose.)
 
 This repo is the **public template**, extracted on 2026-10-09 from the owner's
 private instance. It ships with two invented courses and three demo books. It
-is published on GitHub (`origin`); it has no Vercel project or Blob store yet.
+is published on GitHub (`origin`) and deployed on Vercel (see "Infrastructure").
 
 ## Layout
 
@@ -117,14 +117,20 @@ details for each step. The app is about **books only**.
      `'analysis'` source kind removed. Done 2026-10-09.
 1. Publish on GitHub. Done 2026-10-09: https://github.com/dpakkia/inkbeacon
    (public, MIT).
-2. Audio player for studying: playlists and live streams from YouTube, built
-   into the code, played through a hidden embed. Check YouTube's embed terms
-   first.
+2. Audio player for studying, with playlists and live streams from YouTube.
+   On hold: YouTube's terms forbid a hidden or background player.
 3. Upload and manage books from the app (moves the registry from
    `lib/courses.ts` to Blob).
 4. KOReader progress sync (kosync). Note only; not planned yet.
 
 ## Infrastructure
 
-- Own Vercel project + private Blob store + new `STUDIO_ACCESS_KEY` for this
-  template's deployment. Needs the owner's go-ahead.
+- Done 2026-10-09. Vercel project `inkbeacon` (personal scope), connected to
+  the GitHub repo: pushes to `main` deploy to https://inkbeacon.vercel.app,
+  other branches get previews. `vercel.json` sets the Next.js framework and
+  the `cdg1` function region.
+- Private Blob store `inkbeacon-blob` (`cdg1`), separate from the private
+  instance's store. It holds the three sample books only.
+- `STUDIO_ACCESS_KEY` is set for Production, Preview and Development; the
+  local copy is in `.env.local` (never print it). `vercel env pull .env.local`
+  refreshes the Blob token.

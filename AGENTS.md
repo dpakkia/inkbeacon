@@ -90,9 +90,9 @@ There are no tests. Verify UI changes in a browser, logged out and logged in.
   notes, an old `.env.example` and the original git history of the private
   instance. Don't commit it, publish it or remove it.
 - **Separate infrastructure from the owner's private instance.** This folder's
-  `.env.local` still points at the private instance's Blob store and key. Before
-  running this copy against a server, give it its own Blob store and its own
-  `STUDIO_ACCESS_KEY`, or experiments here will write into real study data.
+  `.env.local` holds placeholders only (Blob token empty). Give this project its
+  own Blob store and its own `STUDIO_ACCESS_KEY`; never paste in the private
+  instance's credentials, or experiments here will write into real study data.
   The private instance lives in another folder; don't touch it from here.
 - Commits: short Italian subject in the style "Il libro bloccato lo dice, …".
   Author is configured locally in this repo.

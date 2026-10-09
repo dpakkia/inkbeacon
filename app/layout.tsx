@@ -8,6 +8,8 @@ import '@fontsource/source-serif-4/400.css';
 import '@fontsource/source-serif-4/600.css';
 import './globals.css';
 
+import Radio from '@/components/radio';
+
 const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL;
 const metadataBase = new URL(
   productionHost ? `https://${productionHost}` : 'http://localhost:3000',
@@ -54,7 +56,10 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Radio />
+      </body>
     </html>
   );
 }

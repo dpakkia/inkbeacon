@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/icon-512.png" alt="" width="128" height="128">
+</p>
+
 # InkBeacon
 
 A beacon of light in a “content” world where reading is hard-to-navigate.

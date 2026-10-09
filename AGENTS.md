@@ -18,8 +18,8 @@ that way. (The code was translated from Italian on 2026-10-09; the importers
 still recognise Italian chapter/part headings on purpose.)
 
 This repo is the **public template**, extracted on 2026-10-09 from the owner's
-private instance. It ships with one invented course and one demo book. It has
-its GitHub remote (`origin`), but no Vercel project and no Blob store yet.
+private instance. It ships with two invented courses and three demo books. It
+is published on GitHub (`origin`); it has no Vercel project or Blob store yet.
 
 ## Layout
 

@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 
 import { COURSES } from '@/lib/courses';
@@ -5,9 +6,19 @@ import { COURSES } from '@/lib/courses';
 export default function Home() {
   return (
     <main className="mx-auto min-h-dvh max-w-3xl px-6 py-16 font-ui text-ink md:py-24">
-      <h1 className="font-heading text-[clamp(2rem,4vw,3rem)] font-medium leading-tight tracking-[-0.03em]">
-        InkBeacon
-      </h1>
+      <div className="flex items-center gap-4 md:gap-5">
+        <Image
+          src="/icon-512.png"
+          alt=""
+          width={72}
+          height={72}
+          priority
+          className="size-[clamp(3rem,6vw,4.5rem)] shrink-0 drop-shadow-sm"
+        />
+        <h1 className="font-heading text-[clamp(2rem,4vw,3rem)] font-medium leading-tight tracking-[-0.03em]">
+          InkBeacon
+        </h1>
+      </div>
       <p className="mt-3 text-muted-ink">
         A beacon of light in a “content” world where reading is
         hard-to-navigate.

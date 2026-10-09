@@ -1,4 +1,6 @@
-# Studio — a personal reading platform
+# InkBeacon
+
+A beacon of light in a “content” world where reading is hard-to-navigate.
 
 A space for studying your own texts: read chapter by chapter, highlight
 sentences, build a Mermaid diagram for each chapter and track the progress of

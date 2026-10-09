@@ -1751,7 +1751,7 @@ export default function Studio({
                 href="/"
                 className="font-heading text-[18px] font-semibold leading-none tracking-[-0.025em] transition-colors hover:text-accent-strong"
               >
-                Studio
+                InkBeacon
               </Link>
               <Link
                 href={`/${course.slug}`}

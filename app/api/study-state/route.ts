@@ -3,7 +3,7 @@ import {
   isBlobConfigured,
   isStudioConfigured,
 } from '@/lib/studio-auth';
-import { parseState, readState, writeState } from '@/lib/stato-studio';
+import { parseState, readState, writeState } from '@/lib/study-state';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -11,12 +11,12 @@ export const runtime = 'nodejs';
 async function requireSession() {
   if (!isStudioConfigured() || !isBlobConfigured()) {
     return Response.json(
-      { error: 'Sincronizzazione server non configurata.' },
+      { error: 'Server sync is not configured.' },
       { status: 503 },
     );
   }
   if (!(await hasStudioSession())) {
-    return Response.json({ error: 'Accesso richiesto.' }, { status: 401 });
+    return Response.json({ error: 'Access required.' }, { status: 401 });
   }
   return null;
 }
@@ -32,7 +32,7 @@ export async function GET() {
   } catch (error) {
     console.error('Unable to read study state from Vercel Blob', error);
     return Response.json(
-      { error: 'Impossibile leggere i dati di studio.' },
+      { error: 'Unable to read the study data.' },
       { status: 502 },
     );
   }
@@ -46,7 +46,7 @@ export async function PUT(request: Request) {
   const state = parseState(rawState);
   if (!state) {
     return Response.json(
-      { error: 'Formato dei dati di studio non valido.' },
+      { error: 'Invalid study data format.' },
       { status: 400 },
     );
   }
@@ -69,7 +69,7 @@ export async function PUT(request: Request) {
   } catch (error) {
     console.error('Unable to write study state to Vercel Blob', error);
     return Response.json(
-      { error: 'Impossibile salvare i dati di studio.' },
+      { error: 'Unable to save the study data.' },
       { status: 502 },
     );
   }

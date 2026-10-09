@@ -19,7 +19,7 @@ export async function GET() {
 export async function POST(request: Request) {
   if (!isStudioConfigured() || !isBlobConfigured()) {
     return Response.json(
-      { error: 'Sincronizzazione server non configurata.' },
+      { error: 'Server sync is not configured.' },
       { status: 503 },
     );
   }
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     typeof body?.accessKey !== 'string' ||
     !isValidAccessKey(body.accessKey)
   ) {
-    return Response.json({ error: 'Chiave non valida.' }, { status: 401 });
+    return Response.json({ error: 'Invalid key.' }, { status: 401 });
   }
 
   await createStudioSession();

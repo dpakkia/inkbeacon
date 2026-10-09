@@ -1,0 +1,167 @@
+{
+  "version": 1,
+  "title": "Notes on remembering what you read",
+  "author": "Example author",
+  "chapterCount": 3,
+  "unitCount": 7,
+  "units": [
+    {
+      "id": "study-notes-01-1",
+      "chapter": 1,
+      "section": 1,
+      "location": "1.1",
+      "chapterLabel": "Chapter 1",
+      "heading": "Why we forget",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Most of what we read is gone within days. This isn’t a flaw of attention: memory keeps what gets used and lets the rest fade."
+        },
+        {
+          "kind": "paragraph",
+          "text": "The practical consequence is simple. Reading once is collecting; remembering starts when you come back to the material."
+        },
+        {
+          "kind": "quote",
+          "text": "Forgetting is the default. Remembering is something you do on purpose."
+        }
+      ]
+    },
+    {
+      "id": "study-notes-01-2",
+      "chapter": 1,
+      "section": 2,
+      "location": "1.2",
+      "chapterLabel": "Chapter 1",
+      "heading": "Coming back on time",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "A second look is worth most just before the memory fades. Too early and it adds little; too late and you are reading from scratch."
+        },
+        {
+          "kind": "heading",
+          "text": "A rough schedule"
+        },
+        {
+          "kind": "list",
+          "text": "The next day."
+        },
+        {
+          "kind": "list",
+          "text": "After three or four days."
+        },
+        {
+          "kind": "list",
+          "text": "After two weeks."
+        },
+        {
+          "kind": "list",
+          "text": "After a couple of months."
+        },
+        {
+          "kind": "caption",
+          "text": "A starting point, not a rule: stretch the gaps for what you know well and shorten them for what keeps slipping."
+        }
+      ]
+    },
+    {
+      "id": "study-notes-02-1",
+      "chapter": 2,
+      "section": 1,
+      "location": "2.1",
+      "chapterLabel": "Chapter 2",
+      "heading": "Highlight less",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "A page covered in colour says nothing. A highlight is useful when it marks a choice: this sentence, and not the ten around it."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Try one colour for the main claims, one for examples and one for doubts. Three are enough; more turn the page back into noise."
+        }
+      ]
+    },
+    {
+      "id": "study-notes-02-2",
+      "chapter": 2,
+      "section": 2,
+      "location": "2.2",
+      "chapterLabel": "Chapter 2",
+      "heading": "From highlights to a diagram",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Highlights are fragments. A diagram forces you to say how the fragments relate: what causes what, what is an instance of what."
+        },
+        {
+          "kind": "paragraph",
+          "text": "If you can’t draw an arrow between two highlights, ask whether you really understood one of them."
+        }
+      ]
+    },
+    {
+      "id": "study-notes-02-3",
+      "chapter": 2,
+      "section": 3,
+      "location": "2.3",
+      "chapterLabel": "Chapter 2",
+      "heading": "Keep it small",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "A chapter diagram that needs scrolling is a second copy of the chapter. Aim for something you can read at a glance."
+        },
+        {
+          "kind": "quote",
+          "text": "If the diagram is as long as the text, it isn’t a diagram yet."
+        }
+      ]
+    },
+    {
+      "id": "study-notes-03-1",
+      "chapter": 3,
+      "section": 1,
+      "location": "3.1",
+      "chapterLabel": "Chapter 3",
+      "heading": "Testing yourself",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Rereading feels productive because the text looks familiar. Familiar isn’t the same as remembered."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Close the book and rebuild the diagram from memory. The gaps you find are the parts worth a second look."
+        }
+      ]
+    },
+    {
+      "id": "study-notes-03-2",
+      "chapter": 3,
+      "section": 2,
+      "location": "3.2",
+      "chapterLabel": "Chapter 3",
+      "heading": "Explaining out loud",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Explaining a chapter to someone else, even an imaginary listener, shows quickly where the explanation runs out."
+        },
+        {
+          "kind": "list",
+          "text": "Start from the main question of the chapter."
+        },
+        {
+          "kind": "list",
+          "text": "Give one example for each claim."
+        },
+        {
+          "kind": "list",
+          "text": "Say what would change your mind."
+        }
+      ]
+    }
+  ]
+}

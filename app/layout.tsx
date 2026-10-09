@@ -15,27 +15,27 @@ const metadataBase = new URL(
 
 export const metadata: Metadata = {
   metadataBase,
-  title: 'Studio — spazio di lettura',
+  title: 'Studio — reading space',
   description:
-    'Una superficie personale per leggere, evidenziare e trasformare le fonti di studio in mappe Mermaid.',
+    'A personal surface for reading, highlighting and turning study sources into Mermaid maps.',
   openGraph: {
     title: 'Studio',
-    description: 'Leggi, evidenzia, costruisci mappe.',
+    description: 'Read, highlight, build maps.',
     images: [
       {
         url: '/og.png',
         width: 1200,
         height: 630,
-        alt: 'Studio — spazio di lettura e mappe',
+        alt: 'Studio — reading space and maps',
       },
     ],
     type: 'website',
-    locale: 'it_IT',
+    locale: 'en_US',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Studio',
-    description: 'Leggi, evidenzia, costruisci mappe.',
+    description: 'Read, highlight, build maps.',
     images: ['/og.png'],
   },
 };
@@ -46,7 +46,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="it" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{

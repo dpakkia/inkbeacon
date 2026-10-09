@@ -70,7 +70,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { ID_FONTI, type Corso, type Fonte } from '@/lib/corsi';
+import { SOURCE_IDS, type Course, type Source } from '@/lib/courses';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 type StudySourceId = string;
@@ -86,14 +86,14 @@ type SyncStatus =
   | 'saved'
   | 'error';
 
-type Anteprima = {
+type Preview = {
   location: string;
   chapter: string;
   heading: string;
   paragraphs: string[];
 };
 
-type Source = Fonte & Anteprima;
+type ReaderSource = Source & Preview;
 
 type Highlight = {
   id: string;
@@ -123,11 +123,18 @@ type FreeScheme = {
 };
 
 type ReadingBlock = {
-  kind: 'paragraph' | 'heading' | 'list' | 'quote' | 'caption' | 'image' | 'video';
+  kind:
+    | 'paragraph'
+    | 'heading'
+    | 'list'
+    | 'quote'
+    | 'caption'
+    | 'image'
+    | 'video';
   text?: string;
   src?: string;
   alt?: string;
-  /** Id YouTube, quando il filmato non e' ospitato con il libro. */
+  /** YouTube id, when the video isn't hosted with the book. */
   youtubeId?: string;
 };
 
@@ -161,27 +168,27 @@ type StudyStatePayload = {
   initialized: boolean;
 };
 
-/** Testi segnaposto per le fonti di cui non esiste ancora il testo integrale. */
-const ANTEPRIME: Record<string, Anteprima> = {};
+/** Placeholder text for sources whose full text doesn't exist yet. */
+const PREVIEWS: Record<string, Preview> = {};
 
-const ANTEPRIMA_VUOTA: Anteprima = {
+const EMPTY_PREVIEW: Preview = {
   location: '',
   chapter: '',
   heading: '',
   paragraphs: [],
 };
 
-/** La voce 'schemi liberi' non e' un libro: compare in ogni corso. */
-const SCHEMI_LIBERI: Source = {
+/** The 'free diagrams' entry is not a book: it appears in every course. */
+const FREE_DIAGRAMS: ReaderSource = {
   id: 'free',
-  tipo: 'schemi',
-  shortTitle: 'Schemi liberi',
-  title: 'Schemi liberi',
+  kind: 'diagrams',
+  shortTitle: 'Free diagrams',
+  title: 'Free diagrams',
   author: '',
-  unit: 'schemi',
+  unit: 'diagrams',
   total: 0,
-  leggibile: false,
-  ...ANTEPRIMA_VUOTA,
+  readable: false,
+  ...EMPTY_PREVIEW,
 };
 
 const DEFAULT_MERMAID_BY_CHAPTER: MermaidStore = {};
@@ -199,50 +206,50 @@ const COLOR_BUTTONS: Array<{
   label: string;
   className: string;
 }> = [
-  { color: 'yellow', label: 'Giallo', className: 'bg-[#f3d76d]' },
-  { color: 'mint', label: 'Grigio', className: 'bg-[#b9bcba]' },
-  { color: 'coral', label: 'Corallo', className: 'bg-[#e9a18a]' },
+  { color: 'yellow', label: 'Yellow', className: 'bg-[#f3d76d]' },
+  { color: 'mint', label: 'Grey', className: 'bg-[#b9bcba]' },
+  { color: 'coral', label: 'Coral', className: 'bg-[#e9a18a]' },
 ];
 
 const EMPTY_HIGHLIGHTS: HighlightStore = Object.fromEntries(
-  ID_FONTI.map((id) => [id, [] as Highlight[]]),
+  SOURCE_IDS.map((id) => [id, [] as Highlight[]]),
 );
 
 const EMPTY_PROGRESS: ProgressStore = Object.fromEntries(
-  ID_FONTI.map((id) => [id, 0]),
+  SOURCE_IDS.map((id) => [id, 0]),
 );
 
 const EMPTY_COMPLETED: CompletedStore = Object.fromEntries(
-  ID_FONTI.map((id) => [id, [] as string[]]),
+  SOURCE_IDS.map((id) => [id, [] as string[]]),
 );
 
-// Il browser puo' avere un localStorage scritto quando le fonti erano tre:
-// quell'archivio non ha le chiavi dei libri aggiunti dopo, e usarlo cosi'
-// com'e' fa esplodere il primo `completedUnits[fonte].includes(...)`.
-// Le chiavi le decide il registro, il salvataggio riempie quelle che conosce.
-function perFonte<T>(salvato: unknown, vuoto: () => T): Record<string, T> {
+// The browser may hold a localStorage written when there were three sources:
+// that store has no keys for the books added later, and using it as is blows
+// up the first `completedUnits[source].includes(...)`.
+// The registry decides the keys; the saved data fills the ones it knows.
+function perSource<T>(saved: unknown, empty: () => T): Record<string, T> {
   const record =
-    salvato && typeof salvato === 'object' && !Array.isArray(salvato)
-      ? (salvato as Record<string, unknown>)
+    saved && typeof saved === 'object' && !Array.isArray(saved)
+      ? (saved as Record<string, unknown>)
       : {};
   return Object.fromEntries(
-    ID_FONTI.map((id) => [id, (record[id] as T | undefined) ?? vuoto()]),
+    SOURCE_IDS.map((id) => [id, (record[id] as T | undefined) ?? empty()]),
   );
 }
 
 const FREE_SCHEME_STARTER = `flowchart LR
-    A[Idea principale] --> B[Primo collegamento]`;
+    A[Main idea] --> B[First connection]`;
 const MIN_DIAGRAM_ZOOM = 0.5;
 const MAX_DIAGRAM_ZOOM = 2;
 const DIAGRAM_ZOOM_STEP = 0.1;
 
 const SYNC_LABELS: Record<SyncStatus, string> = {
-  checking: 'Controllo sincronizzazione…',
-  unconfigured: 'Server da configurare',
-  locked: 'Sincronizzazione bloccata',
-  saving: 'Salvataggio sul server…',
-  saved: 'Salvato sul server',
-  error: 'Server non raggiungibile',
+  checking: 'Checking sync…',
+  unconfigured: 'Server needs setup',
+  locked: 'Sync locked',
+  saving: 'Saving to server…',
+  saved: 'Saved to server',
+  error: 'Server unreachable',
 };
 
 function mergeHighlights(
@@ -250,7 +257,7 @@ function mergeHighlights(
   cached: HighlightStore,
 ): HighlightStore {
   return Object.fromEntries(
-    ID_FONTI.map((sourceId) => {
+    SOURCE_IDS.map((sourceId) => {
       const unique = new Map<string, Highlight>();
       for (const storedHighlight of [
         ...(server[sourceId] ?? []),
@@ -270,7 +277,7 @@ function mergeCompletedUnits(
   cached: CompletedStore,
 ): CompletedStore {
   return Object.fromEntries(
-    ID_FONTI.map((sourceId) => [
+    SOURCE_IDS.map((sourceId) => [
       sourceId,
       [...new Set([...(server[sourceId] ?? []), ...(cached[sourceId] ?? [])])],
     ]),
@@ -308,24 +315,24 @@ function loadJson<T>(key: string, fallback: T): T {
 }
 
 export default function Studio({
-  corso,
-  fonte,
+  course,
+  source: initialSource,
 }: {
-  corso: Corso;
-  fonte: Fonte;
+  course: Course;
+  source: Source;
 }) {
   const router = useRouter();
 
-  // Le fonti selezionabili sono quelle del corso, piu' gli schemi liberi.
-  const sources = useMemo<Source[]>(
+  // The selectable sources are the course's own, plus the free diagrams.
+  const sources = useMemo<ReaderSource[]>(
     () => [
-      ...corso.fonti.map((f) => ({
-        ...f,
-        ...(ANTEPRIME[f.id] ?? ANTEPRIMA_VUOTA),
+      ...course.sources.map((s) => ({
+        ...s,
+        ...(PREVIEWS[s.id] ?? EMPTY_PREVIEW),
       })),
-      SCHEMI_LIBERI,
+      FREE_DIAGRAMS,
     ],
-    [corso],
+    [course],
   );
 
   const isMobile = useIsMobile();
@@ -336,10 +343,10 @@ export default function Studio({
   const completedStoreRef = useRef<CompletedStore>(EMPTY_COMPLETED);
   const freeSchemesRef = useRef<FreeScheme[]>([]);
   const mermaidStoreRef = useRef<MermaidStore>(DEFAULT_MERMAID_BY_CHAPTER);
-  const sourceIdRef = useRef<SourceId>(fonte.id);
+  const sourceIdRef = useRef<SourceId>(initialSource.id);
   const serverReadyRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [sourceId, setSourceId] = useState<SourceId>(fonte.id);
+  const [sourceId, setSourceId] = useState<SourceId>(initialSource.id);
   const [progress, setProgress] = useState<ProgressStore>(EMPTY_PROGRESS);
   const [completedUnits, setCompletedUnits] =
     useState<CompletedStore>(EMPTY_COMPLETED);
@@ -400,9 +407,9 @@ export default function Studio({
     }),
     [source],
   );
-  const isCollectionSource = source.leggibile;
+  const isCollectionSource = source.readable;
   const activeCollection = books[sourceId] ?? null;
-  // senza il libro caricato il lettore mostrerebbe il testo dimostrativo
+  // without the loaded book the reader would show the placeholder text
   const isBookUnavailable = isCollectionSource && !activeCollection;
   const activeLoadStatus = isCollectionSource
     ? (bookStatus[sourceId] ?? 'idle')
@@ -481,10 +488,10 @@ export default function Studio({
         highlightStoreRef.current,
       );
       const mergedProgress = Object.fromEntries(
-        ID_FONTI.map((id) => [
+        SOURCE_IDS.map((id) => [
           id,
-          // senza i default un id ignoto a una delle due parti darebbe NaN,
-          // che poi il server rifiuta come progresso non intero
+          // without the defaults, an id unknown to either side would give NaN,
+          // which the server then rejects as non-integer progress
           Math.max(payload.progress[id] ?? 0, progressRef.current[id] ?? 0),
         ]),
       ) as ProgressStore;
@@ -546,13 +553,13 @@ export default function Studio({
 
   /* oxlint-disable react/react-compiler -- browser-only persisted state hydrates after mount */
   useEffect(() => {
-    const cachedProgress = perFonte<number>(
+    const cachedProgress = perSource<number>(
       loadJson<unknown>('studio:progress', null),
       () => 0,
     ) as ProgressStore;
     progressRef.current = cachedProgress;
     setProgress(cachedProgress);
-    const cachedCompleted = perFonte<string[]>(
+    const cachedCompleted = perSource<string[]>(
       loadJson<unknown>('studio:completed-units', null),
       () => [],
     ) as CompletedStore;
@@ -563,13 +570,13 @@ export default function Studio({
     setFreeSchemes(cachedFreeSchemes);
     setActiveFreeSchemeId(cachedFreeSchemes[0]?.id ?? '');
     const cachedHighlights = Object.fromEntries(
-      ID_FONTI.map((id) => [
+      SOURCE_IDS.map((id) => [
         id,
         loadJson<Highlight[]>(`studio:highlights:${id}`, []),
       ]),
     ) as HighlightStore;
     highlightStoreRef.current = cachedHighlights;
-    // quelle della fonte aperta: qui ci si arriva da qualunque corso
+    // those of the open source: this page is reached from any course
     setHighlights(cachedHighlights[sourceIdRef.current] ?? []);
     const cachedMermaid = loadJson<MermaidStore>(
       'studio:mermaid-by-chapter',
@@ -656,7 +663,7 @@ export default function Studio({
     if (syncStatus !== 'saved' || !isCollectionSource) return;
     if (bookStatus[sourceId] && bookStatus[sourceId] !== 'idle') return;
 
-    const caricaLibro = async () => {
+    const loadBook = async () => {
       setBookStatus((prev) => ({ ...prev, [sourceId]: 'loading' }));
       try {
         const response = await fetch(`/api/books/${sourceId}`, {
@@ -670,7 +677,7 @@ export default function Studio({
         setBookStatus((prev) => ({ ...prev, [sourceId]: 'error' }));
       }
     };
-    void caricaLibro();
+    void loadBook();
   }, [bookStatus, isCollectionSource, sourceId, syncStatus]);
 
   useEffect(() => {
@@ -719,7 +726,7 @@ export default function Studio({
       setDiagramError(
         error instanceof Error
           ? error.message.split('\n')[0]
-          : 'La sintassi Mermaid contiene un errore.',
+          : 'The Mermaid syntax contains an error.',
       );
     } finally {
       setIsRendering(false);
@@ -887,15 +894,17 @@ export default function Studio({
       );
       setPendingSelection(null);
       setSourceId(nextSource);
-      router.push(`/${corso.slug}/${nextSource}`);
+      router.push(`/${course.slug}/${nextSource}`);
     },
-    [corso.slug, router],
+    [course.slug, router],
   );
 
   const toggleReadingUnitCompleted = useCallback(() => {
     if (!studySourceId) return;
     setCompletedUnits((current) => {
-      const isCompleted = (current[studySourceId] ?? []).includes(completedUnitKey);
+      const isCompleted = (current[studySourceId] ?? []).includes(
+        completedUnitKey,
+      );
       const next = {
         ...current,
         [studySourceId]: isCompleted
@@ -905,8 +914,8 @@ export default function Studio({
           : [...(current[studySourceId] ?? []), completedUnitKey],
       };
       completedStoreRef.current = next;
-      // a pagine il progresso si muove a mano: i capitoli spuntati non sono pagine
-      if (source.unit !== 'pagine') {
+      // with pages, progress is moved by hand: ticked chapters aren't pages
+      if (source.unit !== 'pages') {
         setProgress((progressState) => ({
           ...progressState,
           [studySourceId]: next[studySourceId].length,
@@ -1035,14 +1044,14 @@ export default function Studio({
         const payload = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setAccessError(payload?.error ?? 'Impossibile collegarsi al server.');
+        setAccessError(payload?.error ?? 'Unable to connect to the server.');
         return;
       }
       setAccessKey('');
       setSyncDialogOpen(false);
       await loadServerState();
     } catch {
-      setAccessError('Il server non è raggiungibile.');
+      setAccessError('The server is unreachable.');
     }
   }, [accessKey, loadServerState]);
 
@@ -1071,7 +1080,7 @@ export default function Studio({
           <button
             key={item.id}
             type="button"
-            title="Clicca per rimuovere l’evidenziazione"
+            title="Click to remove the highlight"
             className={`inline cursor-pointer rounded-[0.18em] px-[0.08em] font-inherit text-inherit underline decoration-1 underline-offset-4 transition-opacity hover:opacity-75 ${HIGHLIGHT_CLASSES[item.color]}`}
             onClick={() => removeHighlight(item.id)}
           >
@@ -1095,8 +1104,8 @@ export default function Studio({
 
   const renderReadingBlock = (block: ReadingBlock, index: number) => {
     if (block.kind === 'video') {
-      // nocookie: nessun cookie finche' non si premi play
-      const sorgente = block.youtubeId
+      // nocookie: no cookies until play is pressed
+      const embedUrl = block.youtubeId
         ? `https://www.youtube-nocookie.com/embed/${block.youtubeId}?rel=0`
         : null;
       return (
@@ -1104,11 +1113,11 @@ export default function Studio({
           key={`${readingUnit.id}-${index}`}
           className="my-10 overflow-hidden rounded-xl border border-line bg-card/50 p-3"
         >
-          {sorgente ? (
+          {embedUrl ? (
             <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-black">
               <iframe
-                src={sorgente}
-                title={block.alt || 'Video del manuale'}
+                src={embedUrl}
+                title={block.alt || 'Video from the textbook'}
                 loading="lazy"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture"
                 allowFullScreen
@@ -1116,7 +1125,7 @@ export default function Studio({
               />
             </div>
           ) : block.src ? (
-            // eslint-disable-next-line jsx-a11y/media-has-caption -- materiale didattico senza sottotitoli
+            // eslint-disable-next-line jsx-a11y/media-has-caption -- teaching material without captions
             <video
               src={block.src}
               controls
@@ -1125,7 +1134,7 @@ export default function Studio({
             />
           ) : (
             <p className="p-4 text-center font-ui text-sm text-muted-ink">
-              Video non ancora collegato.
+              Video not linked yet.
             </p>
           )}
           {block.alt ? (
@@ -1146,7 +1155,7 @@ export default function Studio({
           {/* oxlint-disable-next-line next/no-img-element -- authenticated media cannot be fetched by the image optimizer */}
           <img
             src={block.src}
-            alt={block.alt ?? 'Immagine dal manuale'}
+            alt={block.alt ?? 'Image from the textbook'}
             className="mx-auto h-auto max-h-[70vh] max-w-full rounded-lg object-contain"
           />
         </figure>
@@ -1212,18 +1221,16 @@ export default function Studio({
   const readerPanel = (
     <section
       className="flex h-full min-h-0 flex-col bg-paper"
-      aria-label="Testo da studiare"
+      aria-label="Text to study"
     >
       <div className="flex min-h-[68px] items-center justify-between gap-4 border-b border-line/80 px-5 py-3 md:px-7">
         <div className="min-w-0">
           <p className="font-ui text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-ink">
             {isBookUnavailable ? (
-              'Libro non caricato'
+              'Book not loaded'
             ) : (
               <>
-                {readingUnit.chapterLabel}
-                {source.tipo === 'analisi' ? ' - ' : ' · '}
-                {readingUnit.location}
+                {readingUnit.chapterLabel} · {readingUnit.location}
               </>
             )}
           </p>
@@ -1246,13 +1253,13 @@ export default function Studio({
           >
             <CircleCheck />
             <span className="hidden lg:inline">
-              {isReadingUnitCompleted ? 'Fatto' : 'Segna fatto'}
+              {isReadingUnitCompleted ? 'Done' : 'Mark done'}
             </span>
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Sezione precedente"
+            aria-label="Previous section"
             onClick={() => navigateReadingUnit(-1)}
             disabled={!isCollectionSource || readingUnitIndex === 0}
           >
@@ -1265,17 +1272,13 @@ export default function Studio({
             >
               <SelectTrigger className="h-8 w-[min(38vw,250px)] border-line bg-card/60 px-2 text-xs">
                 <SelectValue>
-                  {source.tipo === 'analisi'
-                    ? `${readingUnit.chapterLabel} - ${readingUnit.location}`
-                    : `${readingUnit.location} · ${readingUnit.heading}`}
+                  {`${readingUnit.location} · ${readingUnit.heading}`}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent align="end">
                 {readingUnits.map((unit) => (
                   <SelectItem key={unit.id} value={unit.id}>
-                    {source.tipo === 'analisi'
-                      ? `${unit.chapterLabel} - ${unit.location}`
-                      : `${unit.location} · ${unit.heading}`}
+                    {`${unit.location} · ${unit.heading}`}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1283,14 +1286,14 @@ export default function Studio({
           ) : (
             <span className="min-w-14 text-center font-ui text-xs tabular-nums text-muted-ink">
               {activeLoadStatus === 'loading' && isCollectionSource
-                ? 'Carico…'
+                ? 'Loading…'
                 : readingUnit.location}
             </span>
           )}
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Sezione successiva"
+            aria-label="Next section"
             onClick={() => navigateReadingUnit(1)}
             disabled={
               !isCollectionSource || readingUnitIndex >= readingUnits.length - 1
@@ -1321,25 +1324,25 @@ export default function Studio({
             </span>
             <h2 className="font-heading text-xl font-medium text-ink">
               {syncStatus === 'locked'
-                ? 'Libro bloccato'
+                ? 'Book locked'
                 : syncStatus === 'unconfigured'
-                  ? 'Server da configurare'
+                  ? 'Server needs setup'
                   : syncStatus === 'error' || activeLoadStatus === 'error'
-                    ? 'Libro non disponibile'
-                    : 'Carico il libro…'}
+                    ? 'Book unavailable'
+                    : 'Loading the book…'}
             </h2>
             <p className="mt-2 font-ui text-sm leading-6 text-muted-ink">
               {syncStatus === 'locked'
-                ? `I capitoli di «${source.title}» sono sul server. Inserisci la chiave di sincronizzazione per aprirli su questo dispositivo.`
+                ? `The chapters of “${source.title}” are on the server. Enter the sync key to open them on this device.`
                 : syncStatus === 'unconfigured'
-                  ? 'Il server non ha ancora la configurazione per conservare i libri.'
+                  ? 'The server is not set up to store books yet.'
                   : syncStatus === 'error' || activeLoadStatus === 'error'
-                    ? `Non riesco a caricare «${source.title}». Verifica la connessione e riprova aggiornando la pagina.`
-                    : `Sto recuperando «${source.title}» dal server.`}
+                    ? `Can’t load “${source.title}”. Check your connection and reload the page to try again.`
+                    : `Fetching “${source.title}” from the server.`}
             </p>
             {syncStatus === 'locked' && (
               <Button className="mt-5" onClick={() => setSyncDialogOpen(true)}>
-                <LockKeyhole /> Inserisci la chiave
+                <LockKeyhole /> Enter the key
               </Button>
             )}
           </div>
@@ -1359,9 +1362,11 @@ export default function Studio({
               {readingUnit.blocks.map(renderReadingBlock)}
             </div>
             <div className="mt-14 flex items-center justify-between border-t border-line/80 pt-6 font-ui text-xs text-muted-ink">
-              <span>Seleziona una frase per evidenziarla</span>
+              <span>Select a sentence to highlight it</span>
               <span>
-                {readingUnitHighlightCount} evidenziazioni in questa sezione
+                {readingUnitHighlightCount}{' '}
+                {readingUnitHighlightCount === 1 ? 'highlight' : 'highlights'}{' '}
+                in this section
               </span>
             </div>
           </div>
@@ -1373,19 +1378,19 @@ export default function Studio({
   const freeSchemesPanel = (
     <section
       className="flex h-full min-h-0 flex-col bg-paper"
-      aria-label="Libreria degli schemi liberi"
+      aria-label="Free diagram library"
     >
       <div className="flex min-h-[68px] items-center justify-between gap-4 border-b border-line/80 px-5 py-3 md:px-7">
         <div className="min-w-0">
           <p className="font-ui text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-ink">
-            Libreria personale
+            Personal library
           </p>
           <p className="mt-1 truncate font-heading text-[17px] font-medium text-ink">
-            Schemi liberi
+            Free diagrams
           </p>
         </div>
         <Button size="sm" onClick={openCreateScheme}>
-          <FilePlus2 /> Nuovo schema
+          <FilePlus2 /> New diagram
         </Button>
       </div>
 
@@ -1396,14 +1401,14 @@ export default function Studio({
               <Workflow className="size-5" />
             </span>
             <h2 className="font-heading text-xl font-medium text-ink">
-              Uno spazio per le tue idee
+              A space for your ideas
             </h2>
             <p className="mt-2 font-ui text-sm leading-6 text-muted-ink">
-              Crea mappe Mermaid indipendenti dai libri e dai film. Ogni schema
-              viene salvato sul server.
+              Create Mermaid maps that aren’t tied to a book. Every diagram is
+              saved to the server.
             </p>
             <Button className="mt-5" onClick={openCreateScheme}>
-              <FilePlus2 /> Crea il primo schema
+              <FilePlus2 /> Create the first diagram
             </Button>
           </div>
         ) : (
@@ -1429,8 +1434,8 @@ export default function Studio({
                       {scheme.title}
                     </span>
                     <span className="mt-1 block font-ui text-[11px] text-muted-ink">
-                      Modificato il{' '}
-                      {new Intl.DateTimeFormat('it-IT', {
+                      Edited{' '}
+                      {new Intl.DateTimeFormat('en-GB', {
                         day: '2-digit',
                         month: 'short',
                         year: 'numeric',
@@ -1443,14 +1448,14 @@ export default function Studio({
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label={`Rinomina ${scheme.title}`}
+                          aria-label={`Rename ${scheme.title}`}
                           onClick={() => openRenameScheme(scheme)}
                         />
                       }
                     >
                       <Pencil />
                     </TooltipTrigger>
-                    <TooltipContent>Rinomina</TooltipContent>
+                    <TooltipContent>Rename</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger
@@ -1458,14 +1463,14 @@ export default function Studio({
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label={`Elimina ${scheme.title}`}
+                          aria-label={`Delete ${scheme.title}`}
                           onClick={() => setSchemeToDelete(scheme)}
                         />
                       }
                     >
                       <Trash2 />
                     </TooltipTrigger>
-                    <TooltipContent>Elimina</TooltipContent>
+                    <TooltipContent>Delete</TooltipContent>
                   </Tooltip>
                 </div>
               );
@@ -1476,9 +1481,10 @@ export default function Studio({
 
       <div className="flex min-h-11 items-center justify-between border-t border-line/80 px-5 font-ui text-[11px] text-muted-ink md:px-7">
         <span>
-          {freeSchemes.length} {freeSchemes.length === 1 ? 'schema' : 'schemi'}
+          {freeSchemes.length}{' '}
+          {freeSchemes.length === 1 ? 'diagram' : 'diagrams'}
         </span>
-        <span>Sincronizzazione privata</span>
+        <span>Private sync</span>
       </div>
     </section>
   );
@@ -1486,16 +1492,16 @@ export default function Studio({
   const editorPanel = (
     <section
       className="flex h-full min-h-0 flex-col bg-workspace"
-      aria-label="Editor della mappa Mermaid"
+      aria-label="Mermaid map editor"
     >
       <div className="flex min-h-[68px] items-center justify-between gap-3 border-b border-workspace-line px-4 py-3 md:px-5">
         <div className="min-w-0">
           <p className="font-ui text-[11px] font-semibold uppercase tracking-[0.16em] text-workspace-muted">
-            {sourceId === 'free' ? 'Schema libero' : 'Schema collegato'}
+            {sourceId === 'free' ? 'Free diagram' : 'Linked diagram'}
           </p>
           <p className="mt-1 truncate font-heading text-[17px] font-medium text-workspace-ink">
             {sourceId === 'free'
-              ? (activeFreeScheme?.title ?? 'Nessuno schema')
+              ? (activeFreeScheme?.title ?? 'No diagram')
               : readingUnit.chapterLabel}
           </p>
         </div>
@@ -1513,7 +1519,7 @@ export default function Studio({
               aria-pressed={editorMode === 'visual'}
             >
               <Eye />
-              <span className="hidden sm:inline">Mappa</span>
+              <span className="hidden sm:inline">Map</span>
             </Button>
             <Button
               variant="ghost"
@@ -1527,7 +1533,7 @@ export default function Studio({
               aria-pressed={editorMode === 'code'}
             >
               <Code2 />
-              <span className="hidden sm:inline">Codice</span>
+              <span className="hidden sm:inline">Code</span>
             </Button>
           </div>
           <Tooltip>
@@ -1536,14 +1542,14 @@ export default function Studio({
                 <Button
                   variant="outline"
                   size="icon"
-                  aria-label="Apri la guida rapida Mermaid"
+                  aria-label="Open the Mermaid quick guide"
                   onClick={() => setMermaidHelpOpen(true)}
                 />
               }
             >
               <CircleHelp />
             </TooltipTrigger>
-            <TooltipContent>Guida rapida Mermaid</TooltipContent>
+            <TooltipContent>Mermaid quick guide</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger
@@ -1551,7 +1557,7 @@ export default function Studio({
                 <Button
                   variant="outline"
                   size="icon"
-                  aria-label="Salva la mappa"
+                  aria-label="Save the map"
                   onClick={saveMermaid}
                   disabled={sourceId === 'free' && !activeFreeScheme}
                 />
@@ -1560,7 +1566,7 @@ export default function Studio({
               {mermaidCode === savedCode ? <Check /> : <Save />}
             </TooltipTrigger>
             <TooltipContent>
-              Salva mappa <span className="ml-1 opacity-70">⌘/Ctrl S</span>
+              Save map <span className="ml-1 opacity-70">⌘/Ctrl S</span>
             </TooltipContent>
           </Tooltip>
         </div>
@@ -1572,9 +1578,7 @@ export default function Studio({
             <div className="mb-3 flex items-center justify-between font-ui text-xs text-workspace-muted">
               <span>Mermaid</span>
               <span>
-                {mermaidCode === savedCode
-                  ? 'Salvato'
-                  : 'Modifiche non salvate'}
+                {mermaidCode === savedCode ? 'Saved' : 'Unsaved changes'}
               </span>
             </div>
             <Textarea
@@ -1586,7 +1590,7 @@ export default function Studio({
                 }))
               }
               spellCheck={false}
-              aria-label="Codice Mermaid"
+              aria-label="Mermaid code"
               className="min-h-0 flex-1 resize-none rounded-xl border-workspace-line bg-[#292b2a] px-5 py-5 font-mono text-[14px] leading-7 text-[#eceeec] caret-[#f3d76d] shadow-inner focus-visible:border-accent-strong focus-visible:ring-accent-strong/20"
             />
           </div>
@@ -1603,7 +1607,7 @@ export default function Studio({
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      aria-label="Riduci lo zoom della mappa"
+                      aria-label="Zoom out of the map"
                       onClick={() => updateDiagramZoom(-DIAGRAM_ZOOM_STEP)}
                       disabled={diagramZoom <= MIN_DIAGRAM_ZOOM}
                     />
@@ -1611,13 +1615,13 @@ export default function Studio({
                 >
                   <ZoomOut />
                 </TooltipTrigger>
-                <TooltipContent>Riduci zoom</TooltipContent>
+                <TooltipContent>Zoom out</TooltipContent>
               </Tooltip>
               <Button
                 variant="ghost"
                 size="sm"
                 className="min-w-14 px-1.5 text-[11px] tabular-nums"
-                aria-label="Ripristina lo zoom al 100%"
+                aria-label="Reset zoom to 100%"
                 onClick={() => setDiagramZoom(1)}
               >
                 {Math.round(diagramZoom * 100)}%
@@ -1628,7 +1632,7 @@ export default function Studio({
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      aria-label="Aumenta lo zoom della mappa"
+                      aria-label="Zoom into the map"
                       onClick={() => updateDiagramZoom(DIAGRAM_ZOOM_STEP)}
                       disabled={diagramZoom >= MAX_DIAGRAM_ZOOM}
                     />
@@ -1636,7 +1640,7 @@ export default function Studio({
                 >
                   <ZoomIn />
                 </TooltipTrigger>
-                <TooltipContent>Aumenta zoom</TooltipContent>
+                <TooltipContent>Zoom in</TooltipContent>
               </Tooltip>
             </div>
             <div
@@ -1649,20 +1653,22 @@ export default function Studio({
               {isRendering ? (
                 <div className="relative flex flex-col items-center gap-3 font-ui text-sm text-workspace-muted">
                   <Sparkles className="size-5 animate-pulse" />
-                  Compongo la mappa…
+                  Drawing the map…
                 </div>
               ) : !mermaidCode.trim() ? (
                 <div className="relative flex max-w-sm flex-col items-center text-center font-ui text-sm text-workspace-muted">
                   <Code2 className="mb-3 size-6" />
                   <p className="font-semibold text-workspace-ink">
                     {sourceId === 'free'
-                      ? 'Questo schema è ancora vuoto.'
-                      : `Nessuno schema per ${readingUnit.chapterLabel.toLowerCase()}.`}
+                      ? 'This diagram is still empty.'
+                      : readingUnit.chapterLabel
+                        ? `No diagram for ${readingUnit.chapterLabel}.`
+                        : 'No diagram for this chapter yet.'}
                   </p>
                   <p className="mt-1 leading-6">
                     {sourceId === 'free'
-                      ? 'Scrivi il codice Mermaid per iniziare a comporre la mappa.'
-                      : 'Crea una mappa Mermaid: resterà associata a questo capitolo.'}
+                      ? 'Write Mermaid code to start building the map.'
+                      : 'Create a Mermaid map: it stays linked to this chapter.'}
                   </p>
                   <Button
                     variant="outline"
@@ -1671,14 +1677,12 @@ export default function Studio({
                     onClick={() => setEditorMode('code')}
                     disabled={sourceId === 'free' && !activeFreeScheme}
                   >
-                    <Code2 /> Crea lo schema
+                    <Code2 /> Create the diagram
                   </Button>
                 </div>
               ) : diagramError ? (
                 <div className="relative max-w-md rounded-xl border border-[#bb735f]/30 bg-[#fff5f1] p-5 font-ui text-sm leading-6 text-[#8b3c28] dark:bg-[#3b2924] dark:text-[#f2b7a7]">
-                  <p className="font-semibold">
-                    La mappa non può essere renderizzata.
-                  </p>
+                  <p className="font-semibold">The map can’t be rendered.</p>
                   <p className="mt-1 opacity-80">{diagramError}</p>
                   <Button
                     variant="outline"
@@ -1686,7 +1690,7 @@ export default function Studio({
                     className="mt-4"
                     onClick={() => setEditorMode('code')}
                   >
-                    <Code2 /> Correggi il codice
+                    <Code2 /> Fix the code
                   </Button>
                 </div>
               ) : (
@@ -1710,8 +1714,8 @@ export default function Studio({
 
       <div className="flex min-h-11 items-center justify-between gap-3 border-t border-workspace-line px-4 font-ui text-[11px] text-workspace-muted md:px-5">
         <span className="truncate">
-          <kbd className="kbd">⌘/Ctrl</kbd> + <kbd className="kbd">Invio</kbd>{' '}
-          cambia vista
+          <kbd className="kbd">⌘/Ctrl</kbd> + <kbd className="kbd">Enter</kbd>{' '}
+          switches view
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
           {syncStatus === 'saving' || syncStatus === 'checking' ? (
@@ -1731,13 +1735,13 @@ export default function Studio({
     <TooltipProvider>
       <main className="flex h-dvh min-h-[640px] flex-col overflow-hidden bg-background font-ui text-ink">
         <header className="flex min-h-[76px] items-center gap-4 border-b border-line bg-paper px-4 md:px-6">
-          {/* la via d'uscita dal lettore: il logo torna ai corsi, la riga
-              sotto all'indice di questo. Senza, da un libro si esce solo
-              con il tasto Indietro del browser. */}
+          {/* the way out of the reader: the logo goes back to the courses,
+              the line below to this course's index. Without them, the only
+              way out of a book is the browser's Back button. */}
           <div className="flex shrink-0 items-center gap-3">
             <Link
               href="/"
-              aria-label="Tutti i corsi"
+              aria-label="All courses"
               className="flex size-9 items-center justify-center rounded-xl bg-[#292b2a] text-[#f6e7a8] shadow-sm transition-opacity hover:opacity-80 dark:bg-[#0f100f]"
             >
               <Highlighter className="size-[17px]" />
@@ -1750,10 +1754,10 @@ export default function Studio({
                 Studio
               </Link>
               <Link
-                href={`/${corso.slug}`}
+                href={`/${course.slug}`}
                 className="mt-1 block max-w-[200px] truncate text-[10px] uppercase tracking-[0.16em] text-muted-ink transition-colors hover:text-ink"
               >
-                {corso.nome}
+                {course.name}
               </Link>
             </div>
           </div>
@@ -1780,7 +1784,7 @@ export default function Studio({
             {studySourceId ? (
               <div className="hidden min-w-0 flex-1 md:block">
                 <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-ink">
-                  <span>Progresso della fonte</span>
+                  <span>Source progress</span>
                   <span className="tabular-nums">
                     {progress[studySourceId]} / {source.total} {source.unit}
                   </span>
@@ -1795,8 +1799,8 @@ export default function Studio({
                 <p className="truncate text-[11px] text-muted-ink">
                   {freeSchemes.length}{' '}
                   {freeSchemes.length === 1
-                    ? 'schema personale'
-                    : 'schemi personali'}
+                    ? 'personal diagram'
+                    : 'personal diagrams'}
                 </p>
               </div>
             )}
@@ -1810,9 +1814,7 @@ export default function Studio({
                     variant="outline"
                     size="icon"
                     aria-label={
-                      isDark
-                        ? 'Passa alla modalità chiara'
-                        : 'Passa alla modalità scura'
+                      isDark ? 'Switch to light mode' : 'Switch to dark mode'
                     }
                     onClick={() =>
                       setTheme((current) =>
@@ -1825,7 +1827,7 @@ export default function Studio({
                 {isDark ? <Sun /> : <Moon />}
               </TooltipTrigger>
               <TooltipContent>
-                {isDark ? 'Modalità chiara' : 'Modalità scura'}
+                {isDark ? 'Light mode' : 'Dark mode'}
               </TooltipContent>
             </Tooltip>
 
@@ -1860,7 +1862,7 @@ export default function Studio({
                   size="icon-sm"
                   onClick={() => updateProgress(-1)}
                   disabled={progress[studySourceId] === 0}
-                  aria-label="Riduci il progresso"
+                  aria-label="Decrease progress"
                 >
                   <Minus />
                 </Button>
@@ -1872,7 +1874,7 @@ export default function Studio({
                   size="icon-sm"
                   onClick={() => updateProgress(1)}
                   disabled={progress[studySourceId] === source.total}
-                  aria-label="Aumenta il progresso"
+                  aria-label="Increase progress"
                 >
                   <Plus />
                 </Button>
@@ -1900,7 +1902,7 @@ export default function Studio({
             className="fixed z-50 flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-xl border border-black/15 bg-[#292b2a] p-1.5 shadow-xl"
             style={{ left: pendingSelection.x, top: pendingSelection.y }}
             role="toolbar"
-            aria-label="Scegli il colore dell’evidenziazione"
+            aria-label="Choose the highlight colour"
           >
             {COLOR_BUTTONS.map((item) => (
               <button
@@ -1908,7 +1910,7 @@ export default function Studio({
                 type="button"
                 onClick={() => addHighlight(item.color)}
                 className={`size-6 rounded-md border-2 border-white/80 transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${item.className}`}
-                aria-label={`Evidenzia in ${item.label.toLowerCase()}`}
+                aria-label={`Highlight in ${item.label.toLowerCase()}`}
               />
             ))}
           </div>
@@ -1920,15 +1922,15 @@ export default function Studio({
           <DialogHeader>
             <DialogTitle>
               {syncStatus === 'unconfigured'
-                ? 'Sincronizzazione da attivare'
-                : 'Dati di studio sul server'}
+                ? 'Sync not set up yet'
+                : 'Study data on the server'}
             </DialogTitle>
             <DialogDescription>
               {syncStatus === 'unconfigured'
-                ? 'L’app è pronta. Manca soltanto il collegamento a uno storage Vercel Blob privato e la chiave personale del progetto.'
+                ? 'The app is ready. All that’s missing is a connection to a private Vercel Blob store and the project’s personal key.'
                 : syncStatus === 'saved' || syncStatus === 'saving'
-                  ? 'Evidenziazioni, capitoli completati, progressi e schemi Mermaid sono sincronizzati in uno spazio privato su Vercel. La copia locale serve solo come cache offline.'
-                  : 'Inserisci la chiave personale una sola volta su questo dispositivo. Verrà conservata in un cookie sicuro e non nel codice del sito.'}
+                  ? 'Highlights, completed chapters, progress and Mermaid diagrams are synced to a private space on Vercel. The local copy is only an offline cache.'
+                  : 'Enter the personal key once on this device. It will be kept in a secure cookie, not in the site’s code.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -1946,16 +1948,16 @@ export default function Studio({
                   type="password"
                   value={accessKey}
                   onChange={(event) => setAccessKey(event.target.value)}
-                  placeholder="Chiave di sincronizzazione"
+                  placeholder="Sync key"
                   autoComplete="current-password"
-                  aria-label="Chiave di sincronizzazione"
+                  aria-label="Sync key"
                 />
                 {accessError && (
                   <p className="text-xs text-destructive">{accessError}</p>
                 )}
                 <DialogFooter className="mx-0 -mb-4">
                   <Button type="submit" disabled={!accessKey.trim()}>
-                    <Cloud /> Collega
+                    <Cloud /> Connect
                   </Button>
                 </DialogFooter>
               </form>
@@ -1966,86 +1968,85 @@ export default function Studio({
       <Dialog open={mermaidHelpOpen} onOpenChange={setMermaidHelpOpen}>
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Guida rapida Mermaid</DialogTitle>
+            <DialogTitle>Mermaid quick guide</DialogTitle>
             <DialogDescription>
-              Le forme e i collegamenti più utili per costruire una mappa
-              concettuale con i flowchart.
+              The most useful shapes and links for building a concept map with
+              flowcharts.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-5 font-ui text-sm sm:grid-cols-2">
             <section>
               <h3 className="mb-2 font-heading text-base font-medium text-ink">
-                Struttura e direzione
+                Structure and direction
               </h3>
               <pre className="overflow-x-auto rounded-lg bg-[#292b2a] p-3 font-mono text-xs leading-6 text-[#eceeec]">
                 <code>{`flowchart LR
-    A[Concetto] --> B[Conseguenza]`}</code>
+    A[Concept] --> B[Consequence]`}</code>
               </pre>
               <p className="mt-2 text-xs leading-5 text-muted-ink">
-                Direzioni: <code>LR</code> sinistra-destra, <code>TB</code>{' '}
-                alto-basso, <code>BT</code> basso-alto, <code>RL</code>{' '}
-                destra-sinistra.
+                Directions: <code>LR</code> left to right, <code>TB</code> top
+                to bottom, <code>BT</code> bottom to top, <code>RL</code> right
+                to left.
               </p>
             </section>
 
             <section>
               <h3 className="mb-2 font-heading text-base font-medium text-ink">
-                Forme dei nodi
+                Node shapes
               </h3>
               <pre className="overflow-x-auto rounded-lg bg-[#292b2a] p-3 font-mono text-xs leading-6 text-[#eceeec]">
-                <code>{`A[Rettangolo]
-B(Arrotondato)
-C((Cerchio))
-D{Domanda}
-E[[Processo]]`}</code>
+                <code>{`A[Rectangle]
+B(Rounded)
+C((Circle))
+D{Question}
+E[[Process]]`}</code>
               </pre>
             </section>
 
             <section>
               <h3 className="mb-2 font-heading text-base font-medium text-ink">
-                Collegamenti
+                Links
               </h3>
               <pre className="overflow-x-auto rounded-lg bg-[#292b2a] p-3 font-mono text-xs leading-6 text-[#eceeec]">
                 <code>{`A --> B
 A --- B
 A -.-> B
 A ==> B
-A -->|etichetta| B`}</code>
+A -->|label| B`}</code>
               </pre>
               <p className="mt-2 text-xs leading-5 text-muted-ink">
-                Nell’ordine: freccia, linea, tratteggio, linea marcata e freccia
-                con etichetta.
+                In order: arrow, line, dotted, thick line and arrow with a
+                label.
               </p>
             </section>
 
             <section>
               <h3 className="mb-2 font-heading text-base font-medium text-ink">
-                Raggruppare concetti
+                Grouping concepts
               </h3>
               <pre className="overflow-x-auto rounded-lg bg-[#292b2a] p-3 font-mono text-xs leading-6 text-[#eceeec]">
-                <code>{`subgraph gruppo [Titolo]
+                <code>{`subgraph group [Title]
     direction TB
     A --> B
 end`}</code>
               </pre>
               <p className="mt-2 text-xs leading-5 text-muted-ink">
-                I commenti iniziano con <code>%%</code>. Evita <code>end</code>{' '}
-                tutto minuscolo come testo di un nodo: usa <code>End</code> o le
-                maiuscole.
+                Comments start with <code>%%</code>. Avoid an all-lowercase{' '}
+                <code>end</code> as node text: use <code>End</code> or capitals.
               </p>
             </section>
           </div>
 
           <div className="border-t border-line pt-4 text-xs text-muted-ink">
-            Per la sintassi completa consulta la{' '}
+            For the full syntax, see the{' '}
             <a
               href="https://mermaid.js.org/syntax/flowchart.html"
               target="_blank"
               rel="noreferrer"
               className="font-semibold text-ink underline underline-offset-4"
             >
-              documentazione ufficiale Mermaid
+              official Mermaid documentation
             </a>
             .
           </div>
@@ -2063,19 +2064,18 @@ end`}</code>
             <DialogHeader>
               <DialogTitle>
                 {schemeDialogMode === 'create'
-                  ? 'Nuovo schema libero'
-                  : 'Rinomina lo schema'}
+                  ? 'New free diagram'
+                  : 'Rename the diagram'}
               </DialogTitle>
               <DialogDescription>
-                Scegli un titolo breve e riconoscibile. Potrai modificarlo in
-                qualsiasi momento.
+                Pick a short, recognisable title. You can change it at any time.
               </DialogDescription>
             </DialogHeader>
             <Input
               value={schemeTitleDraft}
               onChange={(event) => setSchemeTitleDraft(event.target.value)}
-              placeholder="Es. Espressionismo tedesco"
-              aria-label="Titolo dello schema"
+              placeholder="E.g. German Expressionism"
+              aria-label="Diagram title"
               maxLength={160}
             />
             <DialogFooter className="mx-0 -mb-4 mt-5">
@@ -2084,11 +2084,11 @@ end`}</code>
                 variant="outline"
                 onClick={() => setSchemeDialogOpen(false)}
               >
-                Annulla
+                Cancel
               </Button>
               <Button type="submit" disabled={!schemeTitleDraft.trim()}>
                 {schemeDialogMode === 'create' ? <FilePlus2 /> : <Check />}
-                {schemeDialogMode === 'create' ? 'Crea schema' : 'Salva nome'}
+                {schemeDialogMode === 'create' ? 'Create diagram' : 'Save name'}
               </Button>
             </DialogFooter>
           </form>
@@ -2103,18 +2103,18 @@ end`}</code>
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Eliminare questo schema?</DialogTitle>
+            <DialogTitle>Delete this diagram?</DialogTitle>
             <DialogDescription>
-              “{schemeToDelete?.title}” e il relativo codice Mermaid verranno
-              rimossi anche dal server. Questa azione non può essere annullata.
+              “{schemeToDelete?.title}” and its Mermaid code will also be
+              removed from the server. This can’t be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mx-0 -mb-4">
             <Button variant="outline" onClick={() => setSchemeToDelete(null)}>
-              Annulla
+              Cancel
             </Button>
             <Button variant="destructive" onClick={deleteFreeScheme}>
-              <Trash2 /> Elimina schema
+              <Trash2 /> Delete diagram
             </Button>
           </DialogFooter>
         </DialogContent>

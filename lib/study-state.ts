@@ -1,20 +1,18 @@
 /**
- * Lettura, validazione e scrittura del documento di studio su Vercel Blob.
+ * Reading, validating and writing the study document on Vercel Blob.
  *
- * Stava dentro la route `/api/study-state`. Da quando esiste anche
- * `/api/progresso`, due rotte leggono lo stesso documento: il parser vive qui
- * perche' una sola di esse non puo' essere la proprietaria del formato.
+ * This used to live inside the `/api/study-state` route. Since `/api/progress`
+ * exists too, two routes read the same document: the parser lives here
+ * because neither of them can be the owner of the format.
  */
 
 import { get, put } from '@vercel/blob';
 
-import { ID_FONTI, TOTALI_FONTI } from '@/lib/corsi';
+import { SOURCE_IDS, SOURCE_TOTALS } from '@/lib/courses';
 
 const STORAGE_PATH = 'studio/state.json';
 const LEGACY_HIGHLIGHTS_PATH = 'studio/highlights.json';
-const SOURCE_IDS = ID_FONTI;
 const COLORS = ['yellow', 'mint', 'coral'] as const;
-const SOURCE_TOTALS = TOTALI_FONTI;
 
 export type SourceId = string;
 export type HighlightColor = (typeof COLORS)[number];
@@ -59,11 +57,11 @@ export function emptyState(): StudyState {
   };
 }
 
-// Il registro delle fonti cresce nel tempo. Uno stato scritto quando i libri
-// erano tre non conosce quelli aggiunti dopo: se una fonte assente facesse
-// scartare tutto il documento, aggiungere un libro cancellerebbe lo studio
-// fatto sugli altri. Quindi ogni fonte si legge per conto suo e quella che
-// manca torna al proprio valore vuoto.
+// The source registry grows over time. A state written when there were three
+// books knows nothing about the ones added later: if a missing source made the
+// whole document invalid, adding a book would wipe the study done on the
+// others. So each source is read on its own, and a missing one falls back to
+// its empty value.
 function parseCompletedUnits(
   value: unknown,
 ): Record<SourceId, string[]> | null {
@@ -182,8 +180,8 @@ function parseProgress(value: unknown): Record<SourceId, number> | null {
 
   for (const sourceId of SOURCE_IDS) {
     const progress = record[sourceId];
-    // un libro reimportato puo' avere piu' o meno unita' di prima: il
-    // segnalibro si taglia all'ultima pagina che esiste ora, non si perde
+    // a re-imported book can have more or fewer units than before: the
+    // bookmark is clamped to the last page that exists now, not lost
     result[sourceId] = Number.isInteger(progress)
       ? Math.min(Math.max(Number(progress), 0), SOURCE_TOTALS[sourceId] ?? 0)
       : 0;
@@ -196,7 +194,7 @@ export function parseState(value: unknown): StudyState | null {
   const record = value as Partial<StudyState>;
   const highlights = parseHighlights(record.highlights);
   const progress = parseProgress(record.progress);
-  // `?? {}` e non una lista scritta a mano: le chiavi le decide il registro
+  // `?? {}` rather than a hand-written list: the registry decides the keys
   const completedUnits = parseCompletedUnits(record.completedUnits ?? {});
   const freeSchemes = record.freeSchemes
     ? parseFreeSchemes(record.freeSchemes)

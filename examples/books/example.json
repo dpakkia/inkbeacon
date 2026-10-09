@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "title": "How to study a text",
+  "author": "Example author",
+  "chapterCount": 3,
+  "unitCount": 3,
+  "units": [
+    {
+      "id": "example-01-1",
+      "chapter": 1,
+      "section": 1,
+      "location": "Ch. 1",
+      "chapterLabel": "Chapter 1",
+      "heading": "Read with a question",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Before opening a chapter, ask yourself what you want to find in it. A question, even a provisional one, turns reading from passive scrolling into a search."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Select a sentence in this paragraph: the highlight menu will appear. Highlights stay tied to the exact spot in the text."
+        },
+        {
+          "kind": "paragraph",
+          "text": "At the end of the chapter, mark it as done: the course progress updates on its own."
+        }
+      ]
+    },
+    {
+      "id": "example-02-1",
+      "chapter": 2,
+      "section": 1,
+      "location": "Ch. 2",
+      "chapterLabel": "Chapter 2",
+      "heading": "From a hint to a diagram",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Highlighted sentences are the raw material. The diagram is born when you connect them: cause and effect, before and after, general and particular."
+        },
+        {
+          "kind": "paragraph",
+          "text": "The panel on the right accepts Mermaid code. Every chapter has its own diagram, saved together with the rest of your study."
+        },
+        {
+          "kind": "quote",
+          "text": "A useful diagram can be read in ten seconds."
+        }
+      ]
+    },
+    {
+      "id": "example-03-1",
+      "chapter": 3,
+      "section": 1,
+      "location": "Ch. 3",
+      "chapterLabel": "Chapter 3",
+      "heading": "Review",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Review starts from the diagrams, not the text: if a diagram isn't enough to rebuild the chapter, that's where it needs more work."
+        },
+        {
+          "kind": "list",
+          "text": "Reread the diagram without looking at the text."
+        },
+        {
+          "kind": "list",
+          "text": "Explain every connection out loud."
+        },
+        {
+          "kind": "list",
+          "text": "Go back to the text only where you get stuck."
+        }
+      ]
+    }
+  ]
+}

@@ -5,9 +5,9 @@ Reads the spine from the OPF (reading order, not filenames), turns each document
 into a unit, and copies the media it references. Works on a .epub file or on an
 already-extracted directory.
 
-    python3 scripts/import-epub.py <epub|dir> --id esempio \
-        --title "Come si studia un testo" \
-        --author "Autore di esempio"
+    python3 scripts/import-epub.py <epub|dir> --id example \
+        --title "How to study a text" \
+        --author "Example author"
 """
 
 from __future__ import annotations
@@ -29,34 +29,44 @@ BLOCK_TAGS = {
 }
 SKIP_TAGS = {'style', 'script', 'noscript', 'svg', 'head'}
 MEDIA_EXT = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'mp4', 'm4v', 'webm'}
-# I manuali numerano i capitoli in cifre, in lettere o in romano: servono tutti.
-ORDINALI = {
+# Textbooks number chapters in digits, in words or in Roman numerals: all are
+# needed. Both English and Italian headings are recognised.
+ORDINALS = {
+    'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6, 'seven': 7,
+    'eight': 8, 'nine': 9, 'ten': 10, 'eleven': 11, 'twelve': 12,
+    'first': 1, 'second': 2, 'third': 3, 'fourth': 4, 'fifth': 5, 'sixth': 6,
+    'seventh': 7, 'eighth': 8, 'ninth': 9, 'tenth': 10, 'eleventh': 11,
+    'twelfth': 12, 'thirteenth': 13, 'fourteenth': 14, 'fifteenth': 15,
+    'sixteenth': 16, 'seventeenth': 17, 'eighteenth': 18, 'nineteenth': 19,
+    'twentieth': 20,
+    # Italian
     'primo': 1, 'secondo': 2, 'terzo': 3, 'quarto': 4, 'quinto': 5, 'sesto': 6,
     'settimo': 7, 'ottavo': 8, 'nono': 9, 'decimo': 10, 'undicesimo': 11,
     'dodicesimo': 12, 'tredicesimo': 13, 'quattordicesimo': 14, 'quindicesimo': 15,
     'sedicesimo': 16, 'diciassettesimo': 17, 'diciottesimo': 18, 'diciannovesimo': 19,
     'ventesimo': 20, 'ventunesimo': 21, 'ventiduesimo': 22, 'ventitreesimo': 23,
 }
-ROMANI = [('xx', 20), ('xix', 19), ('xviii', 18), ('xvii', 17), ('xvi', 16),
-          ('xv', 15), ('xiv', 14), ('xiii', 13), ('xii', 12), ('xi', 11), ('x', 10),
-          ('ix', 9), ('viii', 8), ('vii', 7), ('vi', 6), ('iv', 4), ('v', 5),
-          ('iii', 3), ('ii', 2), ('i', 1)]
-CAPITOLO = re.compile(r'^\s*capitolo\s+([\w]+)\b[\s.:—-]*(.*)$', re.I)
+ROMAN = [('xx', 20), ('xix', 19), ('xviii', 18), ('xvii', 17), ('xvi', 16),
+         ('xv', 15), ('xiv', 14), ('xiii', 13), ('xii', 12), ('xi', 11), ('x', 10),
+         ('ix', 9), ('viii', 8), ('vii', 7), ('vi', 6), ('iv', 4), ('v', 5),
+         ('iii', 3), ('ii', 2), ('i', 1)]
+CHAPTER = re.compile(r'^\s*(?:chapter|capitolo)\s+([\w]+)\b[\s.:—-]*(.*)$', re.I)
 
 
-def numero_capitolo(testo: str) -> int | None:
-    """Numero del capitolo da 'Capitolo 3', 'Capitolo terzo', 'Capitolo III'."""
-    m = CAPITOLO.match(testo)
+def chapter_number(text: str) -> int | None:
+    """Chapter number from 'Chapter 3', 'Chapter three', 'Chapter III'
+    (or the Italian 'Capitolo 3', 'Capitolo terzo', 'Capitolo III')."""
+    m = CHAPTER.match(text)
     if not m:
         return None
     token = m.group(1).lower()
     if token.isdigit():
         return int(token)
-    if token in ORDINALI:
-        return ORDINALI[token]
-    for romano, valore in ROMANI:
-        if token == romano:
-            return valore
+    if token in ORDINALS:
+        return ORDINALS[token]
+    for roman, value in ROMAN:
+        if token == roman:
+            return value
     return None
 
 
@@ -64,8 +74,8 @@ def clean(value: str) -> str:
     return re.sub(r'\s+', ' ', html.unescape(value).replace('\xa0', ' ')).strip()
 
 
-class Sorgente:
-    """Accesso uniforme a un epub zippato o a una cartella estratta."""
+class EpubSource:
+    """Uniform access to a zipped epub or an extracted folder."""
 
     def __init__(self, path: Path):
         self.zip = zipfile.ZipFile(path) if path.is_file() else None
@@ -84,13 +94,13 @@ class Sorgente:
             return False
 
 
-class Documento(HTMLParser):
-    """Estrae blocchi leggibili e riferimenti multimediali da un documento XHTML."""
+class Document(HTMLParser):
+    """Extracts readable blocks and media references from an XHTML document."""
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.blocks: list[dict] = []
-        self.media: list[str] = []          # src grezzi, risolti dal chiamante
+        self.media: list[str] = []          # raw srcs, resolved by the caller
         self.skip = 0
         self.tag: str | None = None
         self.kind: str | None = None
@@ -151,8 +161,8 @@ class Documento(HTMLParser):
             self.parts.append(data)
 
 
-def leggi_spine(src: Sorgente) -> tuple[str, list[str]]:
-    """Percorso dell'OPF e documenti nell'ordine di lettura."""
+def read_spine(src: EpubSource) -> tuple[str, list[str]]:
+    """Path of the OPF and the documents in reading order."""
     container = src.read('META-INF/container.xml').decode('utf-8', 'replace')
     opf_path = re.search(r'full-path="([^"]+)"', container).group(1)
     opf = src.read(opf_path).decode('utf-8', 'replace')
@@ -168,7 +178,7 @@ def leggi_spine(src: Sorgente) -> tuple[str, list[str]]:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument('sorgente', type=Path)
+    ap.add_argument('source', type=Path)
     ap.add_argument('--id', required=True)
     ap.add_argument('--title', required=True)
     ap.add_argument('--author', default='')
@@ -176,112 +186,112 @@ def main() -> int:
                     default=Path(__file__).resolve().parents[1] / 'data-private')
     args = ap.parse_args()
 
-    src = Sorgente(args.sorgente)
-    _, spine = leggi_spine(src)
+    src = EpubSource(args.source)
+    _, spine = read_spine(src)
     media_dir = args.out / 'media' / args.id
     media_dir.mkdir(parents=True, exist_ok=True)
 
-    copiati: dict[str, str] = {}          # percorso nell'epub -> nome file emesso
-    units, capitolo, sezione, etichetta = [], 0, 0, 'Materiali introduttivi'
+    copied: dict[str, str] = {}           # path in the epub -> emitted file name
+    units, chapter, section, label = [], 0, 0, 'Front matter'
 
     for rel in spine:
         try:
-            testo = src.read(rel).decode('utf-8', 'replace')
+            text = src.read(rel).decode('utf-8', 'replace')
         except (KeyError, OSError):
-            print(f'  ! documento assente: {rel}', file=sys.stderr)
+            print(f'  ! missing document: {rel}', file=sys.stderr)
             continue
 
-        doc = Documento()
-        doc.feed(testo)
+        doc = Document()
+        doc.feed(text)
         blocks = doc.blocks
 
-        # un h1 "Capitolo N" apre un capitolo nuovo
+        # an h1 "Chapter N" opens a new chapter
         for b in blocks:
             if b.get('kind') == 'heading' and b.get('level') == 1:
-                n = numero_capitolo(b.get('text', ''))
+                n = chapter_number(b.get('text', ''))
                 if n is not None:
-                    capitolo, sezione = n, 0
-                    etichetta = f'Capitolo {capitolo}'
+                    chapter, section = n, 0
+                    label = f'Chapter {chapter}'
                 break
 
-        # titolo dell'unita': primo heading utile, altrimenti <title>
+        # unit title: first useful heading, otherwise <title>
         heading = ''
         for i, b in enumerate(blocks):
-            if b.get('kind') == 'heading' and numero_capitolo(b.get('text', '')) is None:
+            if b.get('kind') == 'heading' and chapter_number(b.get('text', '')) is None:
                 heading = blocks.pop(i)['text']
                 break
         if not heading:
-            m = re.search(r'<title[^>]*>(.*?)</title>', testo, re.S)
+            m = re.search(r'<title[^>]*>(.*?)</title>', text, re.S)
             heading = clean(re.sub(r'<[^>]+>', '', m.group(1))) if m else rel
 
-        unit_id = f'{args.id}-{capitolo:02d}-{sezione}'
+        unit_id = f'{args.id}-{chapter:02d}-{section}'
 
-        # risoluzione dei media: percorso relativo al documento -> file copiato
-        finali = []
+        # media resolution: path relative to the document -> copied file
+        final = []
         for b in blocks:
             if '_media' not in b:
-                finali.append(b)
+                final.append(b)
                 continue
             target = posixpath.normpath(posixpath.join(posixpath.dirname(rel), b['_media']))
             ext = target.rsplit('.', 1)[-1].lower()
             if ext not in MEDIA_EXT or not src.exists(target):
                 continue
-            if target not in copiati:
-                nome = f'{args.id}-{len(copiati):04d}.{ext}'
-                (media_dir / nome).write_bytes(src.read(target))
-                copiati[target] = nome
-            blocco = {'kind': b['kind'],
-                      'src': f'/api/books/{args.id}/media/{copiati[target]}'}
+            if target not in copied:
+                name = f'{args.id}-{len(copied):04d}.{ext}'
+                (media_dir / name).write_bytes(src.read(target))
+                copied[target] = name
+            block = {'kind': b['kind'],
+                     'src': f'/api/books/{args.id}/media/{copied[target]}'}
             if b['kind'] == 'image':
-                blocco['alt'] = b['alt'] or 'Immagine dal manuale'
-            finali.append(blocco)
+                block['alt'] = b['alt'] or 'Image from the textbook'
+            final.append(block)
 
-        if not finali:
+        if not final:
             continue
 
         units.append({
             'id': unit_id,
-            'chapter': capitolo,
-            'section': sezione,
-            'location': 'Apertura' if capitolo == 0 else f'{capitolo}.{sezione}',
-            'chapterLabel': etichetta,
+            'chapter': chapter,
+            'section': section,
+            'location': 'Opening' if chapter == 0 else f'{chapter}.{section}',
+            'chapterLabel': label,
             'heading': heading,
-            'blocks': finali,
+            'blocks': final,
         })
-        sezione += 1
+        section += 1
 
-    # Alcuni volumi non scrivono mai "Capitolo N": i capitoli sono titolati per
-    # argomento e ogni documento dello spine e' gia' un capitolo a se'.
-    if capitolo == 0 and len(units) > 1:
+    # Some books never write "Chapter N": chapters are titled by topic and each
+    # document in the spine is already a chapter of its own.
+    if chapter == 0 and len(units) > 1:
         for n, u in enumerate(units, 1):
             u['chapter'] = n
             u['section'] = 0
             u['location'] = f'{n}'
             u['chapterLabel'] = u['heading']
-        capitolo = len(units)
-        print('  (nessuna numerazione esplicita: un capitolo per documento)')
+        chapter = len(units)
+        print('  (no explicit numbering: one chapter per document)')
 
-    libro = {
+    book = {
         'version': 1,
         'title': args.title,
         'author': args.author,
-        'chapterCount': capitolo,
+        'chapterCount': chapter,
         'unitCount': len(units),
         'units': units,
     }
     out = args.out / 'books' / f'{args.id}.json'
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(libro, ensure_ascii=False), encoding='utf-8')
+    out.write_text(json.dumps(book, ensure_ascii=False), encoding='utf-8')
 
-    tipi: dict[str, int] = {}
+    kinds: dict[str, int] = {}
     for u in units:
         for b in u['blocks']:
-            tipi[b['kind']] = tipi.get(b['kind'], 0) + 1
-    peso = sum(f.stat().st_size for f in media_dir.iterdir()) / 1048576
+            kinds[b['kind']] = kinds.get(b['kind'], 0) + 1
+    size = sum(f.stat().st_size for f in media_dir.iterdir()) / 1048576
 
-    print(f'{args.id}: {len(units)} unita\', {capitolo} capitoli')
-    print(f'  blocchi: {", ".join(f"{k}={v}" for k, v in sorted(tipi.items()))}')
-    print(f'  media: {len(copiati)} file, {peso:.1f} MB -> {media_dir}')
+    print(f'{args.id}: {len(units)} units, {chapter} chapters')
+    print(f'  blocks: {", ".join(f"{k}={v}" for k, v in sorted(kinds.items()))}')
+    print(f'  media: {len(copied)} files, {size:.1f} MB -> {media_dir}')
     print(f'  json: {out.stat().st_size / 1048576:.1f} MB -> {out}')
     return 0
 

@@ -1,70 +1,83 @@
-# Studio — piattaforma di lettura personalizzata
+# Studio — a personal reading platform
 
-Uno spazio per studiare i propri testi: si legge capitolo per capitolo, si
-evidenziano le frasi, si costruisce uno schema Mermaid per ogni capitolo e si
-segna l'avanzamento di ogni corso. Lo stato di studio si sincronizza su un
-archivio privato, protetto da una chiave personale.
+A space for studying your own texts: read chapter by chapter, highlight
+sentences, build a Mermaid diagram for each chapter and track the progress of
+every course. Study state syncs to a private store, protected by a personal
+key.
 
-Costruita con Next.js, Tailwind e Vercel Blob.
+Built with Next.js, Tailwind and Vercel Blob.
 
-## Come funziona
+## How it works
 
-- **Corsi e fonti** sono elencati in `lib/corsi.ts`. È l'unico file da toccare
-  per aggiungere un corso o un libro.
-- **I libri** non stanno nel repository: si convertono in JSON in locale e si
-  caricano su un Vercel Blob store privato. L'app li scarica solo dopo che hai
-  inserito la chiave.
-- **Lo studio** (evidenziazioni, schemi, avanzamento) si salva nello stesso
-  store, in `studio/state.json`.
-- **`GET /api/progresso`** restituisce le percentuali per corso, con
-  `Authorization: Bearer <STUDIO_ACCESS_KEY>`. Serve a mostrarle altrove (per
-  esempio su un display).
+- **Courses and sources** are listed in `lib/courses.ts`. It's the only file to
+  touch to add a course or a book.
+- **Books** don't live in the repository: they're converted to JSON locally
+  and uploaded to a private Vercel Blob store. The app downloads them only
+  after you've entered the key.
+- **Your study** (highlights, diagrams, progress) is saved to the same store,
+  in `studio/state.json`.
+- **`GET /api/progress`** returns the percentages per course, with
+  `Authorization: Bearer <STUDIO_ACCESS_KEY>`. It's there to show them
+  elsewhere (on a display, for example).
 
-## Avvio
+## Getting started
 
-Serve Node.js 22.13 o successivo.
+You need Node.js 22.13 or later.
 
 ```bash
 npm install
-cp .env.example .env.local   # poi scegli una chiave lunga e casuale
+cp .env.example .env.local   # then pick a long, random key
 npm run dev
 ```
 
-Per sincronizzare e leggere i libri serve un Blob store privato: crealo dal
-pannello di Vercel, collegalo al progetto e scarica le variabili con
-`vercel env pull .env.local`. Aggiungi `STUDIO_ACCESS_KEY` anche alle variabili
-del progetto su Vercel.
+To sync and read books you need a private Blob store: create it from the
+Vercel dashboard, connect it to the project and pull the variables with
+`vercel env pull .env.local`. Add `STUDIO_ACCESS_KEY` to the project's
+variables on Vercel too.
 
-## Aggiungere un libro
+## Adding a book
 
-1. Aggiungi la fonte in `lib/corsi.ts`, con un `id` breve (per esempio
-   `esempio`).
-2. Converti il libro nel formato di lettura, dentro `data-private/` (che è
-   ignorata da git):
-
-   ```bash
-   # da un EPUB
-   python3 scripts/import-epub.py libro.epub --id esempio \
-       --title "Titolo" --author "Autore"
-   # da un export HTML in un solo file (stile Calibre)
-   python3 scripts/import-html-unico.py cartella/ --id esempio \
-       --title "Titolo" --author "Autore"
-   ```
-
-3. Caricalo nello store:
+1. Add the source to `lib/courses.ts`, with a short `id` (for example
+   `example`).
+2. Convert the book to the reading format, inside `data-private/` (which git
+   ignores):
 
    ```bash
-   node --env-file=.env.local scripts/upload-libro.mjs esempio
+   # from an EPUB
+   python3 scripts/import-epub.py book.epub --id example \
+       --title "Title" --author "Author"
+   # from a single-file HTML export (Calibre style)
+   python3 scripts/import-single-html.py folder/ --id example \
+       --title "Title" --author "Author"
    ```
 
-Per provare subito, `esempi/books/esempio.json` è un piccolo libro dimostrativo
-già nel formato giusto, abbinato al corso di esempio:
+   Chapter and part headings are recognised in English ("Chapter 3",
+   "Part II") and Italian ("Capitolo 3", "Parte II").
+
+3. Upload it to the store:
+
+   ```bash
+   node --env-file=.env.local scripts/upload-book.mjs example
+   ```
+
+To try it straight away, `examples/books/` holds three small demo books
+already in the right format, matching the two example courses in
+`lib/courses.ts`. `slow-reading` counts progress in pages, which you move by
+hand.
 
 ```bash
 mkdir -p data-private/books
-cp esempi/books/esempio.json data-private/books/
-node --env-file=.env.local scripts/upload-libro.mjs esempio
+cp examples/books/*.json data-private/books/
+for id in example study-notes slow-reading; do
+  node --env-file=.env.local scripts/upload-book.mjs "$id"
+done
 ```
 
-Carica solo testi che hai il diritto di usare: lo store è privato, ma i libri
-restano opere protette.
+Only upload texts you have the right to use: the store is private, but books
+remain copyrighted works.
+
+## AI disclaimer
+
+This code was automated in various steps, but with inspection so close I
+wouldn't personally consider it "vibe-coding". That said, many issues were
+solved with the use of models from Anthropic, OpenAI, and local-running Qwen.

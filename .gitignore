@@ -38,17 +38,17 @@ next-env.d.ts
 /work/
 /data-private/
 
-# copie dello stato di studio: dati personali, restano in locale
+# copies of the study state: personal data, they stay local
 /backup-stato/
 
-# il modello resta pubblicabile: l'esempio di configurazione si', i segreti no
+# the template stays publishable: the example config yes, the secrets no
 !.env.example
 
-# script e appunti legati ai propri libri, fuori dal repository
+# scripts and notes tied to your own books, kept out of the repository
 /_privato/
 __pycache__/
 *.pyc
 tsconfig.tsbuildinfo
 
-# promemoria locale per il prossimo agente
+# local reminder for the next agent
 /FIRST_TODO.md

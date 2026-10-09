@@ -8,41 +8,43 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-# Handoff — piattaforma di lettura personalizzata
+# Handoff — personal reading platform
 
 A personal study space: read a book unit by unit, highlight sentences, build a
 Mermaid diagram per chapter, track progress per course. Study state syncs to a
-private Vercel Blob store behind a single personal key. UI, code identifiers
-and comments are in **Italian**; keep it that way.
+private Vercel Blob store behind a single personal key. UI, code identifiers,
+file and route names, comments, docs and commits are in **English**; keep it
+that way. (The code was translated from Italian on 2026-10-09; the importers
+still recognise Italian chapter/part headings on purpose.)
 
 This repo is the **public template**, extracted on 2026-10-09 from the owner's
 private instance. It ships with one invented course and one demo book. It has
-one commit, no remote, no Vercel project and no Blob store yet.
+a few local commits, no remote, no Vercel project and no Blob store yet.
 
 ## Layout
 
-| Path | What it is |
-|---|---|
-| `lib/corsi.ts` | Registry of courses (`CORSI`) and their sources (`fonti`). Single source of truth: routes, valid ids and progress totals all derive from it. Adding a course or book = editing this file only. |
-| `components/studio.tsx` | The whole client app (~2200 lines): reader, highlights, Mermaid editor/preview, progress, sync dialog, free schemes. |
-| `app/page.tsx` | Course list. |
-| `app/[corso]/page.tsx`, `app/[corso]/[fonte]/page.tsx` | Course page; reader for one source. Statically generated from `CORSI`. `fonte = 'free'` is the "Schemi liberi" pseudo-source present in every course. |
-| `app/api/session` | `GET` status, `POST {accessKey}` sets the session cookie, `DELETE` logs out. |
-| `app/api/study-state` | `GET`/`PUT` the study document. |
-| `app/api/books/[fonte]` (+ `/media/[filename]`) | Streams a book JSON / its media from Blob. Session required; only ids in the registry with `leggibile: true`. |
-| `app/api/progresso` | Read-only per-course percentages. Accepts the cookie **or** `Authorization: Bearer <STUDIO_ACCESS_KEY>` (for curl, scripts, an external display). |
-| `lib/stato-studio.ts` | Parse/validate/read/write of the study document (`studio/state.json`, `version: 4`). |
-| `lib/studio-auth.ts` | Key check and session cookie (HMAC of a fixed message keyed by `STUDIO_ACCESS_KEY`, httpOnly, 30 days). |
-| `scripts/import-epub.py`, `scripts/import-html-unico.py` | Convert an EPUB / a single-file Calibre HTML export into the reading format, into `data-private/`. |
-| `scripts/upload-libro.mjs <id>` | Uploads `data-private/books/<id>.json` and `data-private/media/<id>/` to Blob under `studio/books/<id>/`. Run with `node --env-file=.env.local`. |
-| `esempi/books/esempio.json` | Demo book matching the example source `esempio`. Also the reference for the reading format (`ReadingCollection` in `studio.tsx`). |
+| Path                                                      | What it is                                                                                                                                                                                                                     |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `lib/courses.ts`                                          | Registry of courses (`COURSES`) and their `sources`. Single source of truth: routes, valid ids and progress totals all derive from it. Adding a course or book = editing this file only.                                       |
+| `components/studio.tsx`                                   | The whole client app (~2200 lines): reader, highlights, Mermaid editor/preview, progress, sync dialog, free diagrams (`freeSchemes` in code and in stored data).                                                               |
+| `app/page.tsx`                                            | Course list.                                                                                                                                                                                                                   |
+| `app/[course]/page.tsx`, `app/[course]/[source]/page.tsx` | Course page; reader for one source. Statically generated from `COURSES`. `source = 'free'` is the "Free diagrams" pseudo-source present in every course.                                                                       |
+| `app/api/session`                                         | `GET` status, `POST {accessKey}` sets the session cookie, `DELETE` logs out.                                                                                                                                                   |
+| `app/api/study-state`                                     | `GET`/`PUT` the study document.                                                                                                                                                                                                |
+| `app/api/books/[source]` (+ `/media/[filename]`)          | Streams a book JSON / its media from Blob. Session required; only ids in the registry with `readable: true`.                                                                                                                   |
+| `app/api/progress`                                        | Read-only per-course percentages. Accepts the cookie **or** `Authorization: Bearer <STUDIO_ACCESS_KEY>` (for curl, scripts, an external display).                                                                              |
+| `lib/study-state.ts`                                      | Parse/validate/read/write of the study document (`studio/state.json`, `version: 4`).                                                                                                                                           |
+| `lib/studio-auth.ts`                                      | Key check and session cookie (HMAC of a fixed message keyed by `STUDIO_ACCESS_KEY`, httpOnly, 30 days).                                                                                                                        |
+| `scripts/import-epub.py`, `scripts/import-single-html.py` | Convert an EPUB / a single-file Calibre HTML export into the reading format, into `data-private/`.                                                                                                                             |
+| `scripts/upload-book.mjs <id>`                            | Uploads `data-private/books/<id>.json` and `data-private/media/<id>/` to Blob under `studio/books/<id>/`. Run with `node --env-file=.env.local`.                                                                               |
+| `examples/books/*.json`                                   | Three demo books (`example`, `study-notes`, `slow-reading`) matching the sources in `lib/courses.ts`; original text written for the template. Also the reference for the reading format (`ReadingCollection` in `studio.tsx`). |
 
 ## How data flows
 
 - **Books are never in the repo.** They are converted locally into
   `data-private/` (gitignored, also in `.vercelignore`) and uploaded to the
   private Blob store. The client fetches a book only once the session is
-  authenticated; until then the reader shows a "Libro bloccato" notice with a
+  authenticated; until then the reader shows a "Book locked" notice with a
   button that opens the key dialog — not placeholder text.
 - **Study state** lives in `localStorage` (`studio:*` keys, highlights per
   source in `studio:highlights:<id>`) and is mirrored to Blob with a ~650 ms
@@ -51,16 +53,18 @@ one commit, no remote, no Vercel project and no Blob store yet.
 - **Schema evolution is deliberate.** Each source is parsed independently, and
   a source missing from a stored document falls back to its empty value. That
   is why adding a book to the registry does not discard study done on the
-  others. Preserve this property in any change to `lib/stato-studio.ts`.
+  others. Preserve this property in any change to `lib/study-state.ts`.
+  The stored field names and `studio:*` keys were already English before the
+  translation and were deliberately left unchanged.
 - **Progress** is summed in units across a course's sources, never averaged
-  across percentages. Sources with `unit: 'pagine'` are moved by hand: ticking
+  across percentages. Sources with `unit: 'pages'` are moved by hand: ticking
   a chapter as done does not touch their page count.
 
 ## Environment
 
 `.env.example` documents it. Needed: `STUDIO_ACCESS_KEY` and a Blob store
 (`BLOB_READ_WRITE_TOKEN`, or `BLOB_STORE_ID` + OIDC on Vercel). Without them the
-app still runs; sync shows "Server da configurare" and books cannot load.
+app still runs; sync shows "Server needs setup" and books cannot load.
 
 ## Commands
 
@@ -94,18 +98,32 @@ There are no tests. Verify UI changes in a browser, logged out and logged in.
   own Blob store and its own `STUDIO_ACCESS_KEY`; never paste in the private
   instance's credentials, or experiments here will write into real study data.
   The private instance lives in another folder; don't touch it from here.
-- Commits: short Italian subject in the style "Il libro bloccato lo dice, …".
+- Commits: short English subject, a plain sentence (e.g. "The locked book says
+  so, …").
   Author is configured locally in this repo.
+  No AI attribution anywhere on GitHub: no `Co-Authored-By`, "Generated with",
+  session links or similar in commits or PRs. AI use is disclosed only in the
+  "AI disclaimer" section at the end of `README.md`; keep it.
 - Read `node_modules/next/dist/docs/` before using Next.js APIs (see the block
   above).
 
-## Open items
+## Roadmap
 
-Start from `FIRST_TODO.md` (local, gitignored) if it exists.
+Start from `FIRST_TODO.md` (local, gitignored) if it exists: it has the
+details for each step. The app is about **books only**.
 
+0. Translate everything to English. Done 2026-10-09.
+   - 0.1 Three sample books in `examples/books/`; the movie-specific
+     `'analysis'` source kind removed. Done 2026-10-09.
+1. Publish on GitHub: `dpakkia/inkbeacon`, public, MIT `LICENSE`.
+2. Audio player for studying: playlists and live streams from YouTube, built
+   into the code, played through a hidden embed. Check YouTube's embed terms
+   first.
+3. Upload and manage books from the app (moves the registry from
+   `lib/courses.ts` to Blob).
+4. KOReader progress sync (kosync). Note only; not planned yet.
 
-1. Create the GitHub repo and push (owner: `dpakkia`; visibility and name not
-   decided yet — ask).
-2. Own Vercel project + private Blob store + new `STUDIO_ACCESS_KEY` for this
-   template's deployment.
-3. Optional: a LICENSE file (owner hasn't chosen one).
+## Infrastructure
+
+- Own Vercel project + private Blob store + new `STUDIO_ACCESS_KEY` for this
+  template's deployment. Needs the owner's go-ahead.

@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "title": "The slow reader’s handbook",
+  "author": "Example author",
+  "chapterCount": 2,
+  "unitCount": 4,
+  "units": [
+    {
+      "id": "slow-reading-01-1",
+      "chapter": 1,
+      "section": 1,
+      "location": "1.1",
+      "chapterLabel": "Chapter 1",
+      "heading": "Setting a pace",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "This book counts progress in pages, not chapters. Use the + and − buttons at the top to move your page count by hand."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Marking a chapter as done here doesn’t change the page count: a chapter can be twenty pages or two."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Slow reading isn’t about reading less. It means giving each page the time it needs, and no more."
+        }
+      ]
+    },
+    {
+      "id": "slow-reading-01-2",
+      "chapter": 1,
+      "section": 2,
+      "location": "1.2",
+      "chapterLabel": "Chapter 1",
+      "heading": "Choosing a place",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "A good reading place has few interruptions and a surface for notes. Comfort matters less than continuity."
+        },
+        {
+          "kind": "caption",
+          "text": "Tip: the same place every day makes starting easier."
+        }
+      ]
+    },
+    {
+      "id": "slow-reading-02-1",
+      "chapter": 2,
+      "section": 1,
+      "location": "2.1",
+      "chapterLabel": "Chapter 2",
+      "heading": "Margins",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Notes in the margin are a conversation with the text. Write questions, objections and links to other chapters."
+        },
+        {
+          "kind": "quote",
+          "text": "A margin note is a question you’ll be glad to find later."
+        }
+      ]
+    },
+    {
+      "id": "slow-reading-02-2",
+      "chapter": 2,
+      "section": 2,
+      "location": "2.2",
+      "chapterLabel": "Chapter 2",
+      "heading": "When to stop",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Stop at the end of an idea, not at the end of a page. It’s easier to pick up a thought than half a sentence."
+        },
+        {
+          "kind": "list",
+          "text": "Finish the paragraph you are in."
+        },
+        {
+          "kind": "list",
+          "text": "Write one line saying where you are."
+        },
+        {
+          "kind": "list",
+          "text": "Close the book."
+        }
+      ]
+    }
+  ]
+}

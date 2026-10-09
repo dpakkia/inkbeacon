@@ -70,11 +70,11 @@ export async function clearStudioSession() {
 }
 
 /**
- * Accesso per le rotte chiamabili anche fuori dal browser.
+ * Access for routes that can also be called from outside the browser.
  *
- * Il cookie vale per la piattaforma aperta in una scheda; `Authorization:
- * Bearer <STUDIO_ACCESS_KEY>` vale per curl, per uno script o per una
- * dashboard esterna, che un cookie httpOnly non ce l'hanno.
+ * The cookie covers the platform open in a tab; `Authorization: Bearer
+ * <STUDIO_ACCESS_KEY>` covers curl, a script or an external dashboard, none of
+ * which have an httpOnly cookie.
  */
 export async function hasStudioAccess(request: Request) {
   const header = request.headers.get('authorization')?.trim() ?? '';

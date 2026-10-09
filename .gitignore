@@ -1,0 +1,51 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/.vinext/
+/out/
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# local environment
+.env*
+
+# deployment and generated files
+.vercel
+next-env.d.ts
+/dist/
+/.wrangler/
+/outputs/
+/work/
+/data-private/
+
+# copie dello stato di studio: dati personali, restano in locale
+/backup-stato/
+
+# il modello resta pubblicabile: l'esempio di configurazione si', i segreti no
+!.env.example
+
+# script e appunti legati ai propri libri, fuori dal repository
+/_privato/
+__pycache__/
+*.pyc
+tsconfig.tsbuildinfo

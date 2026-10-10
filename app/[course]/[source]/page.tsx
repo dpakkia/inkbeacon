@@ -1,7 +1,13 @@
 import { notFound } from 'next/navigation';
 
 import Studio from '@/components/studio';
-import { findCourse, sourceIds, type Source } from '@/lib/courses';
+import {
+  diagramsForCourse,
+  diagramsForSource,
+  findCourse,
+  sourceIds,
+  type Source,
+} from '@/lib/courses';
 import { isKosyncConfigured } from '@/lib/kosync-auth';
 import { readRegistry } from '@/lib/registry';
 
@@ -34,6 +40,9 @@ export default async function SourcePage({
       ? FREE_DIAGRAMS
       : course.sources.find((s) => s.id === sourceId);
   if (!source) notFound();
+  // a course with diagrams off has no free diagrams either
+  const freeDiagrams = diagramsForCourse(registry, course);
+  if (sourceId === 'free' && !freeDiagrams) notFound();
 
   return (
     <Studio
@@ -41,6 +50,13 @@ export default async function SourcePage({
       source={source}
       sourceIds={sourceIds(registry)}
       koreader={isKosyncConfigured()}
+      freeDiagrams={freeDiagrams}
+      diagramsBySource={Object.fromEntries(
+        course.sources.map((s) => [
+          s.id,
+          diagramsForSource(registry, course, s),
+        ]),
+      )}
     />
   );
 }

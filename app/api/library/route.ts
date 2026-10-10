@@ -23,7 +23,8 @@ export async function GET() {
 
 /**
  * Saves edits to courses and book details: names, descriptions, titles,
- * units, totals, order, and which course a book is in. Books are added and
+ * units, totals, order, which course a book is in, and the diagram switches
+ * (global `settings`, per course, per book). Books are added and
  * deleted through their own routes, so the set of book ids can't change here.
  */
 export async function PUT(request: Request) {
@@ -32,6 +33,7 @@ export async function PUT(request: Request) {
 
   const body = (await request.json().catch(() => null)) as {
     courses?: unknown;
+    settings?: unknown;
   } | null;
 
   try {
@@ -40,6 +42,8 @@ export async function PUT(request: Request) {
         version: 1,
         courses: body?.courses,
         deleted: current.deleted,
+        // absent from older clients: keep what's stored
+        settings: body?.settings ?? current.settings,
       });
       if (!next) throw new LibraryError('Some details are invalid.', 400);
       const before = sourceIds(current).sort().join(',');

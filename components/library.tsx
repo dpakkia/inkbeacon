@@ -105,6 +105,48 @@ async function storeOriginal(id: string, file: File, data?: Uint8Array) {
   };
 }
 
+/** Drops keys set to undefined: an absent switch means "follow the level above". */
+function withoutUndefined<T extends object>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, v]) => v !== undefined),
+  ) as T;
+}
+
+/** Diagrams: follow the level above (showing what that means), on, or off. */
+function DiagramsSwitch({
+  value,
+  inherited,
+  inheritedFrom,
+  label,
+  onChange,
+}: {
+  value: boolean | undefined;
+  inherited: boolean;
+  inheritedFrom: 'library' | 'course';
+  label: string;
+  onChange: (value: boolean | undefined) => void;
+}) {
+  return (
+    <NativeSelect
+      size="sm"
+      value={value === undefined ? 'default' : value ? 'on' : 'off'}
+      onChange={(e) =>
+        onChange(
+          e.target.value === 'default' ? undefined : e.target.value === 'on',
+        )
+      }
+      aria-label={label}
+      title={label}
+    >
+      <NativeSelectOption value="default">
+        Diagrams: as {inheritedFrom} ({inherited ? 'on' : 'off'})
+      </NativeSelectOption>
+      <NativeSelectOption value="on">Diagrams: on</NativeSelectOption>
+      <NativeSelectOption value="off">Diagrams: off</NativeSelectOption>
+    </NativeSelect>
+  );
+}
+
 export default function Library({
   initial,
   koreader = false,
@@ -119,14 +161,17 @@ export default function Library({
   const [accessError, setAccessError] = useState('');
   const [registry, setRegistry] = useState(initial);
   const [draft, setDraft] = useState<Course[]>(initial.courses);
+  const [draftSettings, setDraftSettings] = useState(initial.settings);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [toDelete, setToDelete] = useState<Source | null>(null);
   const [attaching, setAttaching] = useState('');
 
   const dirty = useMemo(
-    () => JSON.stringify(draft) !== JSON.stringify(registry.courses),
-    [draft, registry],
+    () =>
+      JSON.stringify(draft) !== JSON.stringify(registry.courses) ||
+      JSON.stringify(draftSettings) !== JSON.stringify(registry.settings),
+    [draft, draftSettings, registry],
   );
 
   useEffect(() => {
@@ -152,6 +197,7 @@ export default function Library({
     (next: Registry) => {
       setRegistry(next);
       setDraft(next.courses);
+      setDraftSettings(next.settings);
       router.refresh();
     },
     [router],
@@ -186,7 +232,7 @@ export default function Library({
         await fetch('/api/library', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ courses: draft }),
+          body: JSON.stringify({ courses: draft, settings: draftSettings }),
         }),
       )) as Registry;
       applyRegistry(next);
@@ -227,14 +273,18 @@ export default function Library({
 
   const updateCourse = (index: number, patch: Partial<Course>) =>
     setDraft((courses) =>
-      courses.map((c, i) => (i === index ? { ...c, ...patch } : c)),
+      courses.map((c, i) =>
+        i === index ? withoutUndefined({ ...c, ...patch }) : c,
+      ),
     );
 
   const updateSource = (id: string, patch: Partial<Source>) =>
     setDraft((courses) =>
       courses.map((c) => ({
         ...c,
-        sources: c.sources.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+        sources: c.sources.map((s) =>
+          s.id === id ? withoutUndefined({ ...s, ...patch }) : s,
+        ),
       })),
     );
 
@@ -347,9 +397,26 @@ export default function Library({
           <h2 className="font-heading text-xl font-medium">
             Courses and books
           </h2>
-          <Button variant="outline" size="sm" onClick={addCourse}>
-            <FolderPlus /> New course
-          </Button>
+          <span className="flex items-center gap-2">
+            <NativeSelect
+              size="sm"
+              value={draftSettings.diagrams ? 'on' : 'off'}
+              onChange={(e) =>
+                setDraftSettings((current) => ({
+                  ...current,
+                  diagrams: e.target.value === 'on',
+                }))
+              }
+              aria-label="Diagrams, everywhere"
+              title="Diagrams everywhere, unless a course or book says otherwise"
+            >
+              <NativeSelectOption value="on">Diagrams: on</NativeSelectOption>
+              <NativeSelectOption value="off">Diagrams: off</NativeSelectOption>
+            </NativeSelect>
+            <Button variant="outline" size="sm" onClick={addCourse}>
+              <FolderPlus /> New course
+            </Button>
+          </span>
         </div>
 
         {draft.map((course, index) => (
@@ -374,6 +441,13 @@ export default function Library({
                   }
                   placeholder="Description (optional)"
                   aria-label="Course description"
+                />
+                <DiagramsSwitch
+                  value={course.diagrams}
+                  inherited={draftSettings.diagrams}
+                  inheritedFrom="library"
+                  label={`Diagrams in ${course.name}`}
+                  onChange={(diagrams) => updateCourse(index, { diagrams })}
                 />
               </div>
               <div className="flex shrink-0 gap-1">
@@ -485,6 +559,15 @@ export default function Library({
                           pages
                         </NativeSelectOption>
                       </NativeSelect>
+                      <DiagramsSwitch
+                        value={source.diagrams}
+                        inherited={course.diagrams ?? draftSettings.diagrams}
+                        inheritedFrom="course"
+                        label={`Diagrams for ${source.title}`}
+                        onChange={(diagrams) =>
+                          updateSource(source.id, { diagrams })
+                        }
+                      />
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-ink">
                       <code className="rounded bg-secondary px-1.5 py-0.5">
@@ -579,7 +662,10 @@ export default function Library({
           <Button
             variant="outline"
             disabled={!dirty || saving}
-            onClick={() => setDraft(registry.courses)}
+            onClick={() => {
+              setDraft(registry.courses);
+              setDraftSettings(registry.settings);
+            }}
           >
             Discard
           </Button>

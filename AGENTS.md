@@ -81,6 +81,11 @@ is published on GitHub (`origin`) and deployed on Vercel (see "Infrastructure").
   stored). Units carry `spine`, the EPUB file they come from. A KOReader
   position is only ever _offered_ in the reader; moving by hand pushes
   InkBeacon's position, unless the offer is open.
+- **Diagrams on/off**: `settings.diagrams` (global, default on), then
+  `course.diagrams`, then `source.diagrams`; absent = follow the level above
+  (`diagramsForSource`, `diagramsForCourse` in `lib/courses.ts`). Off hides
+  the diagram panel (and, per course, the free diagrams); stored diagrams are
+  never deleted. Edited on the Library page.
 - **Progress** is summed in units across a course's sources, never averaged
   across percentages. Sources with `unit: 'pages'` are moved by hand: ticking
   a chapter as done does not touch their page count.

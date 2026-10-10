@@ -33,6 +33,8 @@ export type Source = {
    * for KOReader's catalogue: the file name it's served under.
    */
   originalName?: string;
+  /** Diagrams for this book: absent = follow the course. */
+  diagrams?: boolean;
 };
 
 export type Course = {
@@ -40,6 +42,13 @@ export type Course = {
   name: string;
   description: string;
   sources: Source[];
+  /** Diagrams for this course's books and its free diagrams: absent = follow the global setting. */
+  diagrams?: boolean;
+};
+
+export type LibrarySettings = {
+  /** Diagrams everywhere, unless a course or book says otherwise. Default on. */
+  diagrams: boolean;
 };
 
 export type Registry = {
@@ -50,6 +59,7 @@ export type Registry = {
    * save their study data back.
    */
   deleted: string[];
+  settings: LibrarySettings;
   updatedAt: string;
 };
 
@@ -106,6 +116,7 @@ export function seedRegistry(): Registry {
     version: 1,
     courses: structuredClone(SEED_COURSES),
     deleted: [],
+    settings: { diagrams: true },
     updatedAt: new Date(0).toISOString(),
   };
 }
@@ -162,6 +173,7 @@ function parseSource(value: unknown): Source | null {
     (total as number) < 0 ||
     (total as number) > 100_000 ||
     typeof item.readable !== 'boolean' ||
+    (item.diagrams !== undefined && typeof item.diagrams !== 'boolean') ||
     !isOptionalDigest(item.koreaderDigest) ||
     !isOptionalDigest(item.koreaderFilenameDigest) ||
     !(
@@ -189,6 +201,7 @@ function parseSource(value: unknown): Source | null {
       ? { koreaderFilenameDigest: item.koreaderFilenameDigest as string }
       : {}),
     ...(item.originalName ? { originalName: item.originalName as string } : {}),
+    ...(typeof item.diagrams === 'boolean' ? { diagrams: item.diagrams } : {}),
   };
 }
 
@@ -245,7 +258,15 @@ function parseCourse(value: unknown): Course | null {
     if (!source) return null;
     sources.push(source);
   }
-  return { slug, name, description, sources };
+  if (item.diagrams !== undefined && typeof item.diagrams !== 'boolean')
+    return null;
+  return {
+    slug,
+    name,
+    description,
+    sources,
+    ...(typeof item.diagrams === 'boolean' ? { diagrams: item.diagrams } : {}),
+  };
 }
 
 /** Validates a registry document; null if anything in it is malformed. */
@@ -280,10 +301,15 @@ export function parseRegistry(value: unknown): Registry | null {
       ].slice(-2_000)
     : [];
 
+  const settings = (item.settings ?? {}) as Record<string, unknown>;
   return {
     version: 1,
     courses,
     deleted,
+    settings: {
+      diagrams:
+        typeof settings.diagrams === 'boolean' ? settings.diagrams : true,
+    },
     updatedAt:
       typeof item.updatedAt === 'string' && item.updatedAt.length <= 40
         ? item.updatedAt
@@ -305,4 +331,18 @@ export function findCourse(registry: Registry, slug: string) {
 
 export function findSource(registry: Registry, id: string) {
   return allSources(registry).find((source) => source.id === id);
+}
+
+/** Whether diagrams are on for a book: the book, else its course, else global. */
+export function diagramsForSource(
+  registry: Registry,
+  course: Course,
+  source: Source,
+) {
+  return source.diagrams ?? course.diagrams ?? registry.settings.diagrams;
+}
+
+/** Whether diagrams (including free diagrams) are on in a course. */
+export function diagramsForCourse(registry: Registry, course: Course) {
+  return course.diagrams ?? registry.settings.diagrams;
 }

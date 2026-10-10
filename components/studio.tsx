@@ -35,6 +35,7 @@ import {
   Sparkles,
   Sun,
   Trash2,
+  TriangleAlert,
   Workflow,
   ZoomIn,
   ZoomOut,
@@ -89,7 +90,9 @@ type SyncStatus =
   | 'locked'
   | 'saving'
   | 'saved'
-  | 'error';
+  | 'error'
+  // the server refuses to load or save: its stored study file is invalid
+  | 'damaged';
 
 type Preview = {
   location: string;
@@ -219,6 +222,7 @@ const SYNC_LABELS: Record<SyncStatus, string> = {
   saving: 'Saving to server…',
   saved: 'Saved to server',
   error: 'Server unreachable',
+  damaged: 'Stored study data unreadable',
 };
 
 function mergeHighlights(
@@ -354,6 +358,7 @@ export default function Studio({
   const [hasLoaded, setHasLoaded] = useState(false);
   const [theme, setTheme] = useState<Theme>('light');
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('checking');
+  const [syncError, setSyncError] = useState('');
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [accessKey, setAccessKey] = useState('');
   const [accessError, setAccessError] = useState('');
@@ -419,6 +424,16 @@ export default function Studio({
     ? (completedUnits[studySourceId]?.includes(completedUnitKey) ?? false)
     : false;
 
+  // the server's own explanation, shown in the sync dialog; saving stops
+  const markDamaged = useCallback(async (response: Response) => {
+    const payload = (await response.json().catch(() => null)) as {
+      error?: string;
+    } | null;
+    serverReadyRef.current = false;
+    setSyncError(payload?.error ?? 'The stored study data can’t be read.');
+    setSyncStatus('damaged');
+  }, []);
+
   const persistServerState = useCallback(async () => {
     if (!serverReadyRef.current) return;
     setSyncStatus('saving');
@@ -441,12 +456,16 @@ export default function Studio({
         setSyncStatus('locked');
         return;
       }
+      if (response.status === 500) {
+        await markDamaged(response);
+        return;
+      }
       if (!response.ok) throw new Error('Server save failed');
       setSyncStatus('saved');
     } catch {
       setSyncStatus('error');
     }
-  }, [ids]);
+  }, [ids, markDamaged]);
 
   const queueServerSave = useCallback(() => {
     if (!serverReadyRef.current) return;
@@ -460,6 +479,10 @@ export default function Studio({
       if (response.status === 401) {
         serverReadyRef.current = false;
         setSyncStatus('locked');
+        return;
+      }
+      if (response.status === 500) {
+        await markDamaged(response);
         return;
       }
       if (!response.ok) throw new Error('Server load failed');
@@ -532,7 +555,7 @@ export default function Studio({
       serverReadyRef.current = false;
       setSyncStatus('error');
     }
-  }, [ids, persistServerState]);
+  }, [ids, markDamaged, persistServerState]);
 
   /* oxlint-disable react/react-compiler -- browser-only persisted state hydrates after mount */
   useEffect(() => {
@@ -645,7 +668,12 @@ export default function Studio({
   }, [hasLoaded, loadServerState]);
 
   useEffect(() => {
-    if (syncStatus !== 'saved' || !isCollectionSource) return;
+    // books don't depend on the study file: they still open when it's damaged
+    if (
+      (syncStatus !== 'saved' && syncStatus !== 'damaged') ||
+      !isCollectionSource
+    )
+      return;
     if (bookStatus[sourceId] && bookStatus[sourceId] !== 'idle') return;
 
     const loadBook = async () => {
@@ -1833,6 +1861,8 @@ export default function Studio({
                   <Cloud />
                 ) : syncStatus === 'locked' ? (
                   <LockKeyhole />
+                ) : syncStatus === 'damaged' ? (
+                  <TriangleAlert className="text-destructive" />
                 ) : (
                   <CloudOff />
                 )}
@@ -1908,18 +1938,23 @@ export default function Studio({
             <DialogTitle>
               {syncStatus === 'unconfigured'
                 ? 'Sync not set up yet'
-                : 'Study data on the server'}
+                : syncStatus === 'damaged'
+                  ? 'Sync paused: stored data unreadable'
+                  : 'Study data on the server'}
             </DialogTitle>
             <DialogDescription>
               {syncStatus === 'unconfigured'
                 ? 'The app is ready. All that’s missing is a connection to a private Vercel Blob store and the project’s personal key.'
-                : syncStatus === 'saved' || syncStatus === 'saving'
-                  ? 'Highlights, completed chapters, progress and Mermaid diagrams are synced to a private space on Vercel. The local copy is only an offline cache.'
-                  : 'Enter the personal key once on this device. It will be kept in a secure cookie, not in the site’s code.'}
+                : syncStatus === 'damaged'
+                  ? `${syncError} Your changes are kept on this device, and nothing is sent to the server until the file is fixed.`
+                  : syncStatus === 'saved' || syncStatus === 'saving'
+                    ? 'Highlights, completed chapters, progress and Mermaid diagrams are synced to a private space on Vercel. The local copy is only an offline cache.'
+                    : 'Enter the personal key once on this device. It will be kept in a secure cookie, not in the site’s code.'}
             </DialogDescription>
           </DialogHeader>
 
           {syncStatus !== 'unconfigured' &&
+            syncStatus !== 'damaged' &&
             syncStatus !== 'saved' &&
             syncStatus !== 'saving' && (
               <form

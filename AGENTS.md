@@ -144,7 +144,8 @@ details for each step. The app is about **books only**.
    Audius (open API, hidden player allowed) is the noted alternative.
 3. Upload and manage books from the app. Done 2026-10-09: the Library page,
    registry in Blob, in-browser EPUB and single-HTML import, confirmed delete.
-4. KOReader progress sync (kosync). Note only; not planned yet.
+4. KOReader progress sync (kosync). Researched 2026-10-10; protocol notes and
+   a design proposal are in `FIRST_TODO.md`. Not built yet.
 
 ## Infrastructure
 

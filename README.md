@@ -29,6 +29,14 @@ Built with Next.js, Tailwind and Vercel Blob.
   `Authorization: Bearer <STUDIO_ACCESS_KEY>`. It's there to show them
   elsewhere (on a display, for example).
 
+## Diagrams
+
+Each chapter has a Mermaid diagram next to the text. Click a highlight to
+**add it to the diagram** as a node (or remove it), and download a diagram
+as **SVG or PNG** from the panel's download button. Diagrams can be switched
+off on the Library page: everywhere, per course, or per book. Switching them
+off hides the panel and keeps what you've drawn.
+
 ## Getting started
 
 You need Node.js 22.13 or later.

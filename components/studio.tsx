@@ -23,6 +23,7 @@ import {
   Cloud,
   CloudOff,
   Code2,
+  Download,
   Eye,
   FilePlus2,
   LoaderCircle,
@@ -309,6 +310,8 @@ export default function Studio({
   source: initialSource,
   sourceIds,
   koreader = false,
+  freeDiagrams = true,
+  diagramsBySource = {},
 }: {
   course: Course;
   source: Source;
@@ -316,6 +319,10 @@ export default function Studio({
   sourceIds: string[];
   /** KOReader sync is enabled on the server (KOREADER_PASSWORD is set). */
   koreader?: boolean;
+  /** This course's free diagrams are on (its diagrams switch, or global). */
+  freeDiagrams?: boolean;
+  /** Diagrams on/off per book of this course, from the library's switches. */
+  diagramsBySource?: Record<string, boolean>;
 }) {
   const router = useRouter();
 
@@ -326,9 +333,9 @@ export default function Studio({
         ...s,
         ...(PREVIEWS[s.id] ?? EMPTY_PREVIEW),
       })),
-      FREE_DIAGRAMS,
+      ...(freeDiagrams ? [FREE_DIAGRAMS] : []),
     ],
-    [course],
+    [course, freeDiagrams],
   );
 
   const isMobile = useIsMobile();
@@ -377,6 +384,15 @@ export default function Studio({
   const [theme, setTheme] = useState<Theme>('light');
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('checking');
   const [syncError, setSyncError] = useState('');
+  const [highlightMenu, setHighlightMenu] = useState<{
+    id: string;
+    quote: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const highlightMenuRef = useRef<HTMLDivElement>(null);
+  const [diagramNotice, setDiagramNotice] = useState('');
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [koreaderOffer, setKoreaderOffer] = useState<{
     unitId: string;
     label: string;
@@ -405,6 +421,8 @@ export default function Studio({
     freeSchemes.find((scheme) => scheme.id === activeFreeSchemeId) ??
     freeSchemes[0] ??
     null;
+  const diagramsOn =
+    sourceId === 'free' ? freeDiagrams : (diagramsBySource[sourceId] ?? true);
   const isDark = theme === 'dark';
   const fallbackUnit = useMemo<ReadingUnit>(
     () => ({
@@ -775,23 +793,29 @@ export default function Studio({
 
   /* oxlint-disable react/react-compiler -- rendering Mermaid is an external-system synchronization */
   useEffect(() => {
-    if (editorMode === 'visual') void renderDiagram();
-  }, [editorMode, renderDiagram]);
+    if (editorMode === 'visual' && diagramsOn) void renderDiagram();
+  }, [diagramsOn, editorMode, renderDiagram]);
   /* oxlint-enable react/react-compiler */
+
+  /** Saves one diagram's code locally and on the server. */
+  const storeMermaid = useCallback(
+    (key: string, code: string) => {
+      const nextStore = { ...mermaidStoreRef.current, [key]: code };
+      mermaidStoreRef.current = nextStore;
+      setMermaidDrafts((current) => ({ ...current, [key]: code }));
+      setSavedMermaidByChapter(nextStore);
+      window.localStorage.setItem(
+        'studio:mermaid-by-chapter',
+        JSON.stringify(nextStore),
+      );
+      if (serverReadyRef.current) void persistServerState();
+    },
+    [persistServerState],
+  );
 
   const saveMermaid = useCallback(() => {
     if (sourceId === 'free' && !activeFreeScheme) return;
-    const nextStore = {
-      ...mermaidStoreRef.current,
-      [mermaidKey]: mermaidCode,
-    };
-    mermaidStoreRef.current = nextStore;
-    setMermaidDrafts((current) => ({ ...current, [mermaidKey]: mermaidCode }));
-    setSavedMermaidByChapter(nextStore);
-    window.localStorage.setItem(
-      'studio:mermaid-by-chapter',
-      JSON.stringify(nextStore),
-    );
+    storeMermaid(mermaidKey, mermaidCode);
     if (sourceId === 'free' && activeFreeScheme) {
       const updatedAt = new Date().toISOString();
       setFreeSchemes((current) =>
@@ -800,8 +824,162 @@ export default function Studio({
         ),
       );
     }
-    if (serverReadyRef.current) void persistServerState();
-  }, [activeFreeScheme, mermaidCode, mermaidKey, persistServerState, sourceId]);
+  }, [activeFreeScheme, mermaidCode, mermaidKey, sourceId, storeMermaid]);
+
+  /**
+   * Adds a highlighted sentence to this chapter's diagram as a node, and
+   * saves it. Its id comes from the highlight, so the same sentence isn't
+   * added twice; connecting it to other nodes is up to the code view.
+   */
+  const addHighlightToDiagram = useCallback(
+    (highlightId: string, quote: string) => {
+      const nodeId = `h${highlightId.replace(/[^A-Za-z0-9]/g, '')}`;
+      if (
+        new RegExp(`(^|[^A-Za-z0-9_])${nodeId}([^A-Za-z0-9_]|$)`, 'm').test(
+          mermaidCode,
+        )
+      ) {
+        setDiagramNotice('Already in this chapter’s diagram.');
+        return;
+      }
+      const text = quote.replace(/\s+/g, ' ').trim();
+      const label = (text.length > 100 ? `${text.slice(0, 99)}…` : text)
+        // quotes would end Mermaid's quoted label
+        .replace(/"/g, '#quot;');
+      const base = mermaidCode.trim()
+        ? mermaidCode.replace(/\s+$/, '')
+        : 'flowchart TD';
+      storeMermaid(mermaidKey, `${base}\n    ${nodeId}["${label}"]`);
+      setDiagramNotice('Added to the diagram.');
+    },
+    [mermaidCode, mermaidKey, storeMermaid],
+  );
+
+  useEffect(() => {
+    if (!highlightMenu) return;
+    const close = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent && event.key !== 'Escape') return;
+      if (
+        event instanceof PointerEvent &&
+        highlightMenuRef.current?.contains(event.target as Node)
+      )
+        return;
+      setHighlightMenu(null);
+    };
+    // the click that opened the menu must not close it: listen from the next tick
+    const timer = setTimeout(() => {
+      window.addEventListener('pointerdown', close);
+      window.addEventListener('keydown', close);
+    });
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', close);
+    };
+  }, [highlightMenu]);
+
+  useEffect(() => {
+    if (!diagramNotice) return;
+    const timer = setTimeout(() => setDiagramNotice(''), 3000);
+    return () => clearTimeout(timer);
+  }, [diagramNotice]);
+
+  /**
+   * Downloads the current map. It is rendered again with plain SVG text
+   * labels (not HTML ones): a self-contained SVG, and one a canvas can turn
+   * into a PNG without tainting. Always light colours, for printing.
+   */
+  const exportDiagram = useCallback(
+    async (format: 'svg' | 'png') => {
+      try {
+        const { default: mermaid } = await import('mermaid');
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: 'strict',
+          theme: 'base',
+          htmlLabels: false,
+          fontFamily: 'Open Sans, Helvetica, Arial, sans-serif',
+          themeVariables: {
+            primaryColor: '#efefec',
+            primaryTextColor: '#2b2d2c',
+            primaryBorderColor: '#8a8d8b',
+            lineColor: '#737775',
+            secondaryColor: '#dedfdd',
+            tertiaryColor: '#f5f5f2',
+            edgeLabelBackground: '#fafaf8',
+            fontSize: '15px',
+          },
+          flowchart: { curve: 'basis' },
+        });
+        diagramCounter.current += 1;
+        const { svg } = await mermaid.render(
+          `study-map-export-${diagramCounter.current}`,
+          mermaidCode,
+        );
+
+        const title =
+          sourceId === 'free'
+            ? (activeFreeScheme?.title ?? 'diagram')
+            : `${source.shortTitle} - ${readingUnit.chapterLabel}`;
+        const name = title.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'diagram';
+        const save = (blob: Blob, extension: string) => {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${name}.${extension}`;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        };
+
+        const svgBlob = new Blob([svg], { type: 'image/svg+xml' });
+        if (format === 'svg') {
+          save(svgBlob, 'svg');
+          return;
+        }
+        const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+        const box = doc.documentElement
+          .getAttribute('viewBox')
+          ?.split(/[\s,]+/)
+          .map(Number);
+        const width = Math.ceil(box?.[2] || 800);
+        const height = Math.ceil(box?.[3] || 600);
+        const image = new window.Image();
+        const url = URL.createObjectURL(svgBlob);
+        await new Promise<void>((resolve, reject) => {
+          image.onload = () => resolve();
+          image.onerror = () =>
+            reject(new Error('The map could not be drawn.'));
+          image.src = url;
+        });
+        const scale = 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = width * scale;
+        canvas.height = height * scale;
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Canvas unavailable.');
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        const png = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, 'image/png'),
+        );
+        if (!png) throw new Error('The PNG could not be created.');
+        save(png, 'png');
+      } catch (error) {
+        setDiagramNotice(
+          error instanceof Error ? error.message : 'The download failed.',
+        );
+      }
+    },
+    [
+      activeFreeScheme,
+      mermaidCode,
+      readingUnit.chapterLabel,
+      source.shortTitle,
+      sourceId,
+    ],
+  );
 
   const toggleEditor = useCallback(() => {
     setEditorMode((current) => (current === 'visual' ? 'code' : 'visual'));
@@ -818,6 +996,7 @@ export default function Studio({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (!diagramsOn) return;
       const modifier = event.metaKey || event.ctrlKey;
       if (modifier && event.key === 'Enter') {
         event.preventDefault();
@@ -830,7 +1009,7 @@ export default function Studio({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [saveMermaid, toggleEditor]);
+  }, [diagramsOn, saveMermaid, toggleEditor]);
 
   const captureSelection = useCallback(() => {
     const selection = window.getSelection();
@@ -1275,9 +1454,21 @@ export default function Studio({
           <button
             key={item.id}
             type="button"
-            title="Click to remove the highlight"
+            title="Highlight options"
+            aria-haspopup="menu"
             className={`inline cursor-pointer rounded-[0.18em] px-[0.08em] font-inherit text-inherit underline decoration-1 underline-offset-4 transition-opacity hover:opacity-75 ${HIGHLIGHT_CLASSES[item.color]}`}
-            onClick={() => removeHighlight(item.id)}
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              setHighlightMenu({
+                id: item.id,
+                quote: item.quote,
+                x: Math.min(
+                  Math.max(rect.left + rect.width / 2, 110),
+                  window.innerWidth - 110,
+                ),
+                y: Math.max(rect.top - 12, 64),
+              });
+            }}
           >
             {text.slice(item.start, item.end)}
           </button>,
@@ -1287,7 +1478,7 @@ export default function Studio({
       parts.push(<Fragment key="tail">{text.slice(cursor)}</Fragment>);
       return parts;
     },
-    [highlights, readingUnit.id, removeHighlight, sourceId],
+    [highlights, readingUnit.id, sourceId],
   );
 
   const readingUnitHighlightCount = useMemo(() => {
@@ -1526,6 +1717,7 @@ export default function Studio({
       <article
         ref={readerRef}
         onPointerUp={captureSelection}
+        onScroll={() => setHighlightMenu(null)}
         className="reader-scroll min-h-0 flex-1 overflow-y-auto px-6 py-9 md:px-[clamp(2rem,5vw,5.5rem)] md:py-12"
       >
         {isBookUnavailable ? (
@@ -1755,6 +1947,47 @@ export default function Studio({
               <span className="hidden sm:inline">Code</span>
             </Button>
           </div>
+          <span className="relative">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    aria-label="Download the map"
+                    aria-haspopup="menu"
+                    aria-expanded={exportMenuOpen}
+                    disabled={!mermaidCode.trim() || Boolean(diagramError)}
+                    onClick={() => setExportMenuOpen((open) => !open)}
+                  />
+                }
+              >
+                <Download />
+              </TooltipTrigger>
+              <TooltipContent>Download the map</TooltipContent>
+            </Tooltip>
+            {exportMenuOpen && (
+              <span
+                role="menu"
+                className="absolute right-0 top-full z-20 mt-1 flex flex-col rounded-lg border border-workspace-line bg-card p-1 font-ui text-xs shadow-lg"
+              >
+                {(['svg', 'png'] as const).map((format) => (
+                  <button
+                    key={format}
+                    type="button"
+                    role="menuitem"
+                    className="whitespace-nowrap rounded-md px-3 py-1.5 text-left hover:bg-secondary"
+                    onClick={() => {
+                      setExportMenuOpen(false);
+                      void exportDiagram(format);
+                    }}
+                  >
+                    {format === 'svg' ? 'SVG (vector)' : 'PNG (image)'}
+                  </button>
+                ))}
+              </span>
+            )}
+          </span>
           <Tooltip>
             <TooltipTrigger
               render={
@@ -1932,10 +2165,16 @@ export default function Studio({
       </div>
 
       <div className="flex min-h-11 items-center justify-between gap-3 border-t border-workspace-line px-4 font-ui text-[11px] text-workspace-muted md:px-5">
-        <span className="truncate">
-          <kbd className="kbd">⌘/Ctrl</kbd> + <kbd className="kbd">Enter</kbd>{' '}
-          switches view
-        </span>
+        {diagramNotice ? (
+          <output className="truncate text-workspace-ink">
+            {diagramNotice}
+          </output>
+        ) : (
+          <span className="truncate">
+            <kbd className="kbd">⌘/Ctrl</kbd> + <kbd className="kbd">Enter</kbd>{' '}
+            switches view
+          </span>
+        )}
         <span className="flex shrink-0 items-center gap-1.5">
           {syncStatus === 'saving' || syncStatus === 'checking' ? (
             <LoaderCircle className="size-3 animate-spin" />
@@ -2105,18 +2344,59 @@ export default function Studio({
         </header>
 
         <div className="min-h-0 flex-1">
-          <ResizablePanelGroup
-            orientation={isMobile ? 'vertical' : 'horizontal'}
-          >
-            <ResizablePanel defaultSize={isMobile ? 56 : 54} minSize={30}>
-              {sourceId === 'free' ? freeSchemesPanel : readerPanel}
-            </ResizablePanel>
-            <ResizableHandle withHandle className="bg-line" />
-            <ResizablePanel defaultSize={isMobile ? 44 : 46} minSize={28}>
-              {editorPanel}
-            </ResizablePanel>
-          </ResizablePanelGroup>
+          {diagramsOn ? (
+            <ResizablePanelGroup
+              orientation={isMobile ? 'vertical' : 'horizontal'}
+            >
+              <ResizablePanel defaultSize={isMobile ? 56 : 54} minSize={30}>
+                {sourceId === 'free' ? freeSchemesPanel : readerPanel}
+              </ResizablePanel>
+              <ResizableHandle withHandle className="bg-line" />
+              <ResizablePanel defaultSize={isMobile ? 44 : 46} minSize={28}>
+                {editorPanel}
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          ) : (
+            // diagrams off for this book: the text takes the whole width;
+            // stored diagrams are kept and come back when switched on
+            readerPanel
+          )}
         </div>
+
+        {highlightMenu && (
+          <div
+            ref={highlightMenuRef}
+            className="fixed z-50 flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-xl border border-black/15 bg-[#292b2a] p-1 font-ui text-xs text-[#eceeec] shadow-xl"
+            style={{ left: highlightMenu.x, top: highlightMenu.y }}
+            role="menu"
+            aria-label="Highlight options"
+          >
+            {diagramsOn && sourceId !== 'free' && (
+              <button
+                type="button"
+                role="menuitem"
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-white"
+                onClick={() => {
+                  addHighlightToDiagram(highlightMenu.id, highlightMenu.quote);
+                  setHighlightMenu(null);
+                }}
+              >
+                <Workflow className="size-3.5" /> Add to diagram
+              </button>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-white"
+              onClick={() => {
+                removeHighlight(highlightMenu.id);
+                setHighlightMenu(null);
+              }}
+            >
+              <Trash2 className="size-3.5" /> Remove highlight
+            </button>
+          </div>
+        )}
 
         {pendingSelection && (
           <div

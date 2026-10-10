@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { findCourse } from '@/lib/courses';
+import { diagramsForCourse, findCourse } from '@/lib/courses';
 import { readRegistry } from '@/lib/registry';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +12,8 @@ export default async function CoursePage({
   params: Promise<{ course: string }>;
 }) {
   const { course: slug } = await params;
-  const course = findCourse(await readRegistry(), slug);
+  const registry = await readRegistry();
+  const course = findCourse(registry, slug);
   if (!course) notFound();
 
   return (
@@ -54,14 +55,16 @@ export default async function CoursePage({
           </li>
         ))}
 
-        <li>
-          <Link
-            href={`/${course.slug}/free`}
-            className="block rounded-xl border border-dashed border-line p-5 text-sm text-muted-ink transition-colors hover:border-accent-strong hover:text-ink"
-          >
-            Free diagrams — maps not tied to a chapter
-          </Link>
-        </li>
+        {diagramsForCourse(registry, course) && (
+          <li>
+            <Link
+              href={`/${course.slug}/free`}
+              className="block rounded-xl border border-dashed border-line p-5 text-sm text-muted-ink transition-colors hover:border-accent-strong hover:text-ink"
+            >
+              Free diagrams — maps not tied to a chapter
+            </Link>
+          </li>
+        )}
       </ul>
     </main>
   );

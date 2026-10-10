@@ -145,7 +145,11 @@ details for each step. The app is about **books only**.
 3. Upload and manage books from the app. Done 2026-10-09: the Library page,
    registry in Blob, in-browser EPUB and single-HTML import, confirmed delete.
 4. KOReader progress sync (kosync). Researched 2026-10-10; protocol notes and
-   a design proposal are in `FIRST_TODO.md`. Not built yet.
+   the design are in `FIRST_TODO.md`. Decided: a separate `KOSYNC_PASSWORD`;
+   a KOReader position is only _offered_ in the reader, never applied
+   silently. Phase 1: KOReader → InkBeacon. Phase 2: InkBeacon → KOReader,
+   at the start of an EPUB file (`/body/DocFragment[N]/body`), researched;
+   needs a test on a real device. Not built yet.
 
 ## Infrastructure
 

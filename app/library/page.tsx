@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import Library from '@/components/library';
+import { isKosyncConfigured } from '@/lib/kosync-auth';
 import { readRegistry } from '@/lib/registry';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +22,7 @@ export default async function LibraryPage() {
       <h1 className="mt-6 mb-10 font-heading text-[clamp(1.8rem,3.4vw,2.6rem)] font-medium leading-tight tracking-[-0.03em]">
         Library
       </h1>
-      <Library initial={registry} />
+      <Library initial={registry} koreader={isKosyncConfigured()} />
     </main>
   );
 }

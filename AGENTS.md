@@ -31,6 +31,11 @@ is published on GitHub (`origin`) and deployed on Vercel (see "Infrastructure").
 | `components/library.tsx`, `app/library/page.tsx`               | The Library page: add a book (convert in the browser + upload), edit courses and book details, delete a book with typed confirmation.                                                                                                                                                                                                    |
 | `lib/import/`                                                  | In-browser importers, TypeScript ports of the Python scripts (`epub.ts`, `single-html.ts`, shared `common.ts`). Same output as the scripts on the same input.                                                                                                                                                                            |
 | `lib/reading-format.ts`                                        | Types of the reading format (`ReadingCollection`).                                                                                                                                                                                                                                                                                       |
+| `lib/md5.ts`                                                   | MD5 (no Web Crypto MD5 in browsers) and KOReader's document ids: `koreaderPartialMd5` (its default "binary" matching) and `koreaderFilenameMd5`. Checked against Node's crypto and KOReader's Lua algorithm.                                                                                                                             |
+| `lib/kosync.ts`, `lib/kosync-auth.ts`                          | KOReader support, on only when `KOREADER_PASSWORD` is set (otherwise every route answers 404). Positions in `studio/kosync.json` keyed by KOReader document id (never in `state.json`); XPointer ↔ spine helpers; kosync auth (`x-auth-key` = MD5 of the password) and OPDS Basic auth.                                                  |
+| `app/kosync/**`                                                | The kosync protocol KOReader speaks (`users/auth`, `users/create` → 402, `syncs/progress`), same status codes and messages as koreader-sync-server.                                                                                                                                                                                      |
+| `app/opds/**`, `lib/opds.ts`                                   | OPDS 1.2 catalogue for KOReader; downloads serve `studio/books/<id>/original.epub` byte for byte, so KOReader's id matches.                                                                                                                                                                                                              |
+| `app/api/kosync/position`                                      | For the reader (session): the newest KOReader position of a book (`GET`, shown as an offer only) and InkBeacon's own position (`PUT`, stored as `/body/DocFragment[spine+1]/body`).                                                                                                                                                      |
 | `app/page.tsx`                                                 | Course list.                                                                                                                                                                                                                                                                                                                             |
 | `components/radio.tsx`, `lib/radio.ts`                         | The radio: YouTube live streams in a 200×200 player (YouTube's minimum; it must stay visible and uncovered) with previous / close / next under it. Mounted in the root layout so it keeps playing across pages. Live-stream ids go stale when a channel restarts a stream: run `node scripts/check-radio.mjs` and update `lib/radio.ts`. |
 | `app/[course]/page.tsx`, `app/[course]/[source]/page.tsx`      | Course page; reader for one source. Rendered on request from the registry. `source = 'free'` is the "Free diagrams" pseudo-source present in every course.                                                                                                                                                                               |
@@ -71,6 +76,11 @@ is published on GitHub (`origin`) and deployed on Vercel (see "Infrastructure").
   Preserve these properties in any change to `lib/study-state.ts`. The stored
   field names and `studio:*` keys were already English before the
   translation and were deliberately left unchanged.
+- **KOReader** (optional): a book links to KOReader through `koreaderDigest`
+  (partial MD5 of its original EPUB) and `originalName` (the original is
+  stored). Units carry `spine`, the EPUB file they come from. A KOReader
+  position is only ever _offered_ in the reader; moving by hand pushes
+  InkBeacon's position, unless the offer is open.
 - **Progress** is summed in units across a course's sources, never averaged
   across percentages. Sources with `unit: 'pages'` are moved by hand: ticking
   a chapter as done does not touch their page count.
@@ -145,11 +155,13 @@ details for each step. The app is about **books only**.
 3. Upload and manage books from the app. Done 2026-10-09: the Library page,
    registry in Blob, in-browser EPUB and single-HTML import, confirmed delete.
 4. KOReader progress sync (kosync). Researched 2026-10-10; protocol notes and
-   the design are in `FIRST_TODO.md`. Decided: a separate `KOSYNC_PASSWORD`;
+   the design are in `FIRST_TODO.md`. Decided: a separate `KOREADER_PASSWORD` (sync and OPDS catalogue);
    a KOReader position is only _offered_ in the reader, never applied
    silently. Phase 1: KOReader → InkBeacon. Phase 2: InkBeacon → KOReader,
    at the start of an EPUB file (`/body/DocFragment[N]/body`), researched;
-   needs a test on a real device. Not built yet.
+   needs a test on a real device. Books reach the phone through an OPDS
+   catalogue serving the original EPUB, kept in Blob next to the converted
+   book. Built 2026-10-10, behind `KOREADER_PASSWORD`; to test on a phone.
 
 ## Infrastructure
 

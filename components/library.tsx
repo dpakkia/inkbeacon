@@ -41,6 +41,7 @@ import {
 import {
   allSources,
   isValidSourceId,
+  safeFileName,
   slugify,
   type Course,
   type Registry,
@@ -87,7 +88,31 @@ function forgetLocally(id: string) {
   }
 }
 
-export default function Library({ initial }: { initial: Registry }) {
+/** Uploads the original EPUB and returns the KOReader fields for the book. */
+async function storeOriginal(id: string, file: File, data?: Uint8Array) {
+  const { koreaderFilenameMd5, koreaderPartialMd5 } = await import('@/lib/md5');
+  const bytes = data ?? new Uint8Array(await file.arrayBuffer());
+  await upload(`studio/books/${id}/original.epub`, file, {
+    access: 'private',
+    handleUploadUrl: UPLOAD_URL,
+    contentType: 'application/epub+zip',
+    multipart: file.size > 8 * 1024 * 1024,
+  });
+  return {
+    koreaderDigest: koreaderPartialMd5(bytes),
+    koreaderFilenameDigest: koreaderFilenameMd5(file.name),
+    originalName: safeFileName(file.name) || 'book.epub',
+  };
+}
+
+export default function Library({
+  initial,
+  koreader = false,
+}: {
+  initial: Registry;
+  /** KOReader support is on: originals are kept for its catalogue and sync. */
+  koreader?: boolean;
+}) {
   const router = useRouter();
   const [access, setAccess] = useState<Access>('checking');
   const [accessKey, setAccessKey] = useState('');
@@ -97,6 +122,7 @@ export default function Library({ initial }: { initial: Registry }) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [toDelete, setToDelete] = useState<Source | null>(null);
+  const [attaching, setAttaching] = useState('');
 
   const dirty = useMemo(
     () => JSON.stringify(draft) !== JSON.stringify(registry.courses),
@@ -168,6 +194,34 @@ export default function Library({ initial }: { initial: Registry }) {
       setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Attach the original EPUB to a book already in the library: stores the
+  // file and saves its KOReader ids (saved directly, so no pending edits).
+  const attachEpub = async (source: Source, file: File) => {
+    setAttaching(source.id);
+    setSaveError('');
+    try {
+      const fields = await storeOriginal(source.id, file);
+      const courses = registry.courses.map((c) => ({
+        ...c,
+        sources: c.sources.map((s) =>
+          s.id === source.id ? { ...s, ...fields } : s,
+        ),
+      }));
+      const next = (await jsonOrError(
+        await fetch('/api/library', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ courses }),
+        }),
+      )) as Registry;
+      applyRegistry(next);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAttaching('');
     }
   };
 
@@ -283,6 +337,7 @@ export default function Library({ initial }: { initial: Registry }) {
     <div className="space-y-12">
       <UploadForm
         registry={registry}
+        koreader={koreader}
         disabled={dirty}
         onAdded={(next) => applyRegistry(next)}
       />
@@ -435,6 +490,34 @@ export default function Library({ initial }: { initial: Registry }) {
                       <code className="rounded bg-secondary px-1.5 py-0.5">
                         {source.id}
                       </code>
+                      {koreader &&
+                        (source.originalName ? (
+                          <span
+                            title={`Served to KOReader as ${source.originalName}`}
+                          >
+                            KOReader ✓
+                          </span>
+                        ) : (
+                          <label
+                            className={`cursor-pointer underline underline-offset-4 ${dirty || attaching ? 'pointer-events-none opacity-50' : ''}`}
+                            title="Choose this book's EPUB: KOReader downloads it from InkBeacon's catalogue and syncs your position"
+                          >
+                            {attaching === source.id
+                              ? 'Attaching…'
+                              : 'Attach EPUB for KOReader'}
+                            <input
+                              type="file"
+                              accept=".epub"
+                              className="sr-only"
+                              disabled={dirty || Boolean(attaching)}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                e.target.value = '';
+                                if (file) void attachEpub(source, file);
+                              }}
+                            />
+                          </label>
+                        ))}
                       <NativeSelect
                         size="sm"
                         value={course.slug}
@@ -605,10 +688,12 @@ type Format = 'epub' | 'html';
 
 function UploadForm({
   registry,
+  koreader,
   disabled,
   onAdded,
 }: {
   registry: Registry;
+  koreader: boolean;
   disabled: boolean;
   onAdded: (registry: Registry) => void;
 }) {
@@ -715,6 +800,12 @@ function UploadForm({
         );
       }
 
+      let koreaderFields = {};
+      if (koreader && format === 'epub') {
+        setStatus('Keeping the original EPUB for KOReader…');
+        koreaderFields = await storeOriginal(id, file, data);
+      }
+
       setStatus('Uploading the text…');
       const json = JSON.stringify(book);
       await upload(`studio/books/${id}/book.json`, json, {
@@ -740,6 +831,7 @@ function UploadForm({
                 unit === 'pages'
                   ? Math.round(Number(pages))
                   : book.chapterCount,
+              ...koreaderFields,
             },
             ...(course === NEW_COURSE
               ? { newCourse: { name: newCourseName.trim() } }

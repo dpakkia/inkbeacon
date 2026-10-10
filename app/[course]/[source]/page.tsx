@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 
 import Studio from '@/components/studio';
 import { findCourse, sourceIds, type Source } from '@/lib/courses';
+import { isKosyncConfigured } from '@/lib/kosync-auth';
 import { readRegistry } from '@/lib/registry';
 
 export const dynamic = 'force-dynamic';
@@ -35,6 +36,11 @@ export default async function SourcePage({
   if (!source) notFound();
 
   return (
-    <Studio course={course} source={source} sourceIds={sourceIds(registry)} />
+    <Studio
+      course={course}
+      source={source}
+      sourceIds={sourceIds(registry)}
+      koreader={isKosyncConfigured()}
+    />
   );
 }

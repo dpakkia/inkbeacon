@@ -36,6 +36,7 @@ import {
   Sun,
   Trash2,
   TriangleAlert,
+  X,
   Workflow,
   ZoomIn,
   ZoomOut,
@@ -289,15 +290,32 @@ function loadJson<T>(key: string, fallback: T): T {
   }
 }
 
+function relativeTime(unixSeconds: number) {
+  const seconds = Math.round(unixSeconds - Date.now() / 1000);
+  const format = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+  for (const [unit, size] of [
+    ['day', 86_400],
+    ['hour', 3_600],
+    ['minute', 60],
+  ] as const) {
+    if (Math.abs(seconds) >= size)
+      return format.format(Math.round(seconds / size), unit);
+  }
+  return format.format(seconds, 'second');
+}
+
 export default function Studio({
   course,
   source: initialSource,
   sourceIds,
+  koreader = false,
 }: {
   course: Course;
   source: Source;
   /** Every book in the registry, not only this course's: study data is shared. */
   sourceIds: string[];
+  /** KOReader sync is enabled on the server (KOREADER_PASSWORD is set). */
+  koreader?: boolean;
 }) {
   const router = useRouter();
 
@@ -359,6 +377,15 @@ export default function Studio({
   const [theme, setTheme] = useState<Theme>('light');
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('checking');
   const [syncError, setSyncError] = useState('');
+  const [koreaderOffer, setKoreaderOffer] = useState<{
+    unitId: string;
+    label: string;
+    device: string;
+    timestamp: number;
+  } | null>(null);
+  const userMovedRef = useRef(false);
+  const koreaderCheckedRef = useRef(new Set<string>());
+  const koreaderPushRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [accessKey, setAccessKey] = useState('');
   const [accessError, setAccessError] = useState('');
@@ -1019,19 +1046,51 @@ export default function Studio({
     queueServerSave();
   }, [queueServerSave, schemeToDelete]);
 
+  const koreaderLinked =
+    koreader &&
+    isCollectionSource &&
+    Boolean(source.koreaderDigest || source.koreaderFilenameDigest);
+  const handledKey = `studio:kosync-handled:${sourceId}`;
+  const markHandled = useCallback(
+    (timestamp: number) => {
+      try {
+        window.localStorage.setItem(handledKey, String(timestamp));
+      } catch {
+        // offered again next time: harmless
+      }
+    },
+    [handledKey],
+  );
+
+  const dismissKoreaderOffer = useCallback(() => {
+    if (koreaderOffer) markHandled(koreaderOffer.timestamp);
+    setKoreaderOffer(null);
+  }, [koreaderOffer, markHandled]);
+
   const changeReadingUnit = useCallback(
     (unitId: string) => {
       const nextIndex = readingUnits.findIndex((unit) => unit.id === unitId);
       if (nextIndex < 0 || !isCollectionSource) return;
+      userMovedRef.current = true;
+      // moving by hand while the offer is open counts as declining it
+      if (koreaderOffer) dismissKoreaderOffer();
       setUnitIndexes((prev) => ({ ...prev, [sourceId]: nextIndex }));
       setPendingSelection(null);
     },
-    [isCollectionSource, readingUnits, sourceId],
+    [
+      dismissKoreaderOffer,
+      isCollectionSource,
+      koreaderOffer,
+      readingUnits,
+      sourceId,
+    ],
   );
 
   const navigateReadingUnit = useCallback(
     (delta: number) => {
       if (!isCollectionSource) return;
+      userMovedRef.current = true;
+      if (koreaderOffer) dismissKoreaderOffer();
       setUnitIndexes((prev) => ({
         ...prev,
         [sourceId]: Math.min(
@@ -1041,8 +1100,131 @@ export default function Studio({
       }));
       setPendingSelection(null);
     },
-    [isCollectionSource, readingUnits.length, sourceId],
+    [
+      dismissKoreaderOffer,
+      isCollectionSource,
+      koreaderOffer,
+      readingUnits.length,
+      sourceId,
+    ],
   );
+
+  // KOReader sync. A position pushed from KOReader is only *offered* here
+  // ("Continue from Kobo…"), never applied by itself. Moving to another
+  // section by hand sends InkBeacon's position the other way (the start of
+  // that EPUB file), unless the offer is still open: that would overwrite
+  // the e-reader's exact position with a coarser one.
+  useEffect(() => {
+    if (!koreaderLinked || !activeCollection || syncStatus !== 'saved') return;
+    if (koreaderCheckedRef.current.has(sourceId)) return;
+    koreaderCheckedRef.current.add(sourceId);
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/kosync/position?source=${encodeURIComponent(sourceId)}`,
+          { cache: 'no-store' },
+        );
+        if (!response.ok) return;
+        const { record, spine, fromInkBeacon } = (await response.json()) as {
+          record: {
+            percentage: number;
+            device: string;
+            timestamp: number;
+          } | null;
+          spine: number | null;
+          fromInkBeacon: boolean;
+        };
+        if (!record || fromInkBeacon) return;
+        let handled = 0;
+        try {
+          handled = Number(window.localStorage.getItem(handledKey)) || 0;
+        } catch {
+          // no memory of earlier offers
+        }
+        if (record.timestamp <= handled) return;
+
+        const units = activeCollection.units;
+        let target: ReadingUnit | undefined;
+        if (spine !== null && units.some((u) => typeof u.spine === 'number')) {
+          target =
+            units.find((u) => u.spine === spine) ??
+            [...units].reverse().find((u) => (u.spine ?? -1) < spine);
+        } else {
+          // a book imported before spine indexes existed: by share of the book
+          target = units[Math.round(record.percentage * (units.length - 1))];
+        }
+        if (!target || target.id === readingUnit.id) {
+          markHandled(record.timestamp);
+          return;
+        }
+        setKoreaderOffer({
+          unitId: target.id,
+          label: `${target.chapterLabel} · ${target.location}`,
+          device: record.device,
+          timestamp: record.timestamp,
+        });
+      } catch {
+        // no offer: the reader works the same without it
+      }
+    })();
+  }, [
+    activeCollection,
+    handledKey,
+    koreaderLinked,
+    markHandled,
+    readingUnit.id,
+    sourceId,
+    syncStatus,
+  ]);
+
+  const acceptKoreaderOffer = useCallback(() => {
+    if (!koreaderOffer) return;
+    const index = readingUnits.findIndex((u) => u.id === koreaderOffer.unitId);
+    // not a manual move: KOReader already has the exact position
+    if (index >= 0) setUnitIndexes((prev) => ({ ...prev, [sourceId]: index }));
+    markHandled(koreaderOffer.timestamp);
+    setKoreaderOffer(null);
+  }, [koreaderOffer, markHandled, readingUnits, sourceId]);
+
+  // share of the book's text before each unit: KOReader shows it in its prompt
+  const unitStartShare = useMemo(() => {
+    const sizes = readingUnits.map((u) =>
+      u.blocks.reduce((sum, b) => sum + (b.text?.length ?? 0), 0),
+    );
+    const total = sizes.reduce((a, b) => a + b, 0) || 1;
+    const shares: number[] = [];
+    for (let i = 0, before = 0; i < sizes.length; i += 1) {
+      shares.push(before / total);
+      before += sizes[i];
+    }
+    return shares;
+  }, [readingUnits]);
+
+  useEffect(() => {
+    if (!userMovedRef.current) return;
+    userMovedRef.current = false;
+    if (!koreaderLinked || typeof readingUnit.spine !== 'number') return;
+    if (koreaderPushRef.current) clearTimeout(koreaderPushRef.current);
+    const body = JSON.stringify({
+      source: sourceId,
+      spine: readingUnit.spine,
+      percentage: unitStartShare[readingUnitIndex] ?? 0,
+    });
+    koreaderPushRef.current = setTimeout(() => {
+      void fetch('/api/kosync/position', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      }).catch(() => undefined);
+    }, 1500);
+  }, [
+    koreaderLinked,
+    readingUnit.id,
+    readingUnit.spine,
+    readingUnitIndex,
+    sourceId,
+    unitStartShare,
+  ]);
 
   const connectServer = useCallback(async () => {
     if (!accessKey.trim()) return;
@@ -1316,6 +1498,30 @@ export default function Studio({
           </Button>
         </div>
       </div>
+
+      {koreaderOffer && (
+        <output className="flex flex-wrap items-center gap-2 border-b border-line/80 bg-secondary/60 px-5 py-2 font-ui text-xs text-ink md:px-7">
+          <span className="min-w-0 flex-1">
+            Continue from <strong>{koreaderOffer.device}</strong>:{' '}
+            {koreaderOffer.label}
+            <span className="text-muted-ink">
+              {' '}
+              · {relativeTime(koreaderOffer.timestamp)}
+            </span>
+          </span>
+          <Button size="xs" onClick={acceptKoreaderOffer}>
+            Continue
+          </Button>
+          <Button
+            size="xs"
+            variant="ghost"
+            aria-label="Dismiss"
+            onClick={dismissKoreaderOffer}
+          >
+            <X />
+          </Button>
+        </output>
+      )}
 
       <article
         ref={readerRef}

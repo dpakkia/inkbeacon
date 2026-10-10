@@ -5,7 +5,11 @@
  *   node scripts/upload-book.mjs example --course example-course
  *   node scripts/upload-book.mjs example --course example-course --pages 240
  *   node scripts/upload-book.mjs example --no-video
+ *   node scripts/upload-book.mjs example --epub path/to/book.epub
  *
+ * --epub also stores the original EPUB for KOReader's catalogue and sets the
+ * book's KOReader ids (it must be the exact file you'll read in KOReader).
+ * It works for a book already in the library too, without --course.
  * Without --course the files are uploaded but the book doesn't appear in the
  * app: that's for replacing the text of a book that's already listed.
  * Adding to the library imports lib/courses.ts, so it needs a Node version
@@ -36,13 +40,14 @@ const option = (name) => {
 };
 if (!source) {
   console.error(
-    'Usage: node scripts/upload-book.mjs <source-id> [--course <slug>] [--pages <n>] [--no-video]',
+    'Usage: node scripts/upload-book.mjs <source-id> [--course <slug>] [--pages <n>] [--epub <file>] [--no-video]',
   );
   process.exit(1);
 }
 const noVideo = flags.includes('--no-video');
 const courseSlug = option('--course');
 const pages = option('--pages');
+const epubPath = option('--epub');
 
 const root = new URL('../data-private/', import.meta.url);
 const book = new URL(`books/${source}.json`, root);
@@ -104,7 +109,29 @@ console.log(
   `"${source}" in the private store: ${uploaded} media, ${(bytes / 1048576).toFixed(1)} MB.`,
 );
 
-if (courseSlug) await addToLibrary();
+let koreaderFields = null;
+if (epubPath) {
+  const { koreaderPartialMd5, koreaderFilenameMd5 } =
+    await import('../lib/md5.ts');
+  const { safeFileName } = await import('../lib/courses.ts');
+  const epub = await readFile(epubPath);
+  await upload(
+    `studio/books/${source}/original.epub`,
+    epub,
+    'application/epub+zip',
+  );
+  const fileName = epubPath.split(/[\\/]/).pop();
+  koreaderFields = {
+    koreaderDigest: koreaderPartialMd5(new Uint8Array(epub)),
+    koreaderFilenameDigest: koreaderFilenameMd5(fileName),
+    originalName: safeFileName(fileName) || 'book.epub',
+  };
+  console.log(
+    `original EPUB stored for KOReader (${(epub.length / 1048576).toFixed(1)} MB)`,
+  );
+}
+
+if (courseSlug || koreaderFields) await addToLibrary();
 
 /** Adds the book to the registry in Blob, like the library page does. */
 async function addToLibrary() {
@@ -123,9 +150,23 @@ async function addToLibrary() {
     : seedRegistry();
   if (!registry) throw new Error('The stored registry is malformed.');
 
-  if (registry.courses.some((c) => c.sources.some((s) => s.id === source))) {
-    console.log(`"${source}" is already in the library: details unchanged.`);
+  const alreadyListed = registry.courses
+    .flatMap((c) => c.sources)
+    .find((s) => s.id === source);
+  if (alreadyListed) {
+    if (!koreaderFields) {
+      console.log(`"${source}" is already in the library: details unchanged.`);
+      return;
+    }
+    Object.assign(alreadyListed, koreaderFields);
+    await saveRegistry(registry, existing);
+    console.log(`"${source}": KOReader ids updated.`);
     return;
+  }
+  if (!courseSlug) {
+    throw new Error(
+      `"${source}" is not in the library yet: add --course <slug>.`,
+    );
   }
   const course = registry.courses.find((c) => c.slug === courseSlug);
   if (!course) {
@@ -142,20 +183,23 @@ async function addToLibrary() {
     unit: pages ? 'pages' : 'chapters',
     total: pages ? Number(pages) : Number(data.chapterCount) || 0,
     readable: true,
+    ...koreaderFields,
   });
   registry.deleted = registry.deleted.filter((id) => id !== source);
-  registry.updatedAt = new Date().toISOString();
-  if (!parseRegistry(registry))
-    throw new Error('The book details are invalid.');
-
-  const etag = existing?.blob.etag.replace(/^W\//, '');
-  await put('studio/registry.json', JSON.stringify(registry), {
-    access: 'private',
-    addRandomSuffix: false,
-    allowOverwrite: Boolean(etag),
-    ...(etag ? { ifMatch: etag } : {}),
-    cacheControlMaxAge: 60,
-    contentType: 'application/json',
-  });
+  await saveRegistry(registry, existing);
   console.log(`"${source}" added to the course "${course.name}".`);
+
+  async function saveRegistry(next, previous) {
+    next.updatedAt = new Date().toISOString();
+    if (!parseRegistry(next)) throw new Error('The book details are invalid.');
+    const etag = previous?.blob.etag.replace(/^W\//, '');
+    await put('studio/registry.json', JSON.stringify(next), {
+      access: 'private',
+      addRandomSuffix: false,
+      allowOverwrite: Boolean(etag),
+      ...(etag ? { ifMatch: etag } : {}),
+      cacheControlMaxAge: 60,
+      contentType: 'application/json',
+    });
+  }
 }

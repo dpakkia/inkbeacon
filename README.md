@@ -87,6 +87,30 @@ done
 Only upload texts you have the right to use: the store is private, but books
 remain copyrighted works.
 
+## Reading on KOReader (optional)
+
+InkBeacon can serve your books to [KOReader](https://koreader.rocks) (on an
+e-reader or Android) and keep your reading position in sync both ways. It's
+off unless `KOREADER_PASSWORD` is set; that password is separate from
+`STUDIO_ACCESS_KEY` and unlocks nothing else.
+
+1. Set `KOREADER_PASSWORD` (a long random string) in the project's variables
+   on Vercel, and in `.env.local` for local use.
+2. Add EPUBs through the Library page: with KOReader on, the original file is
+   kept too. For a book added earlier, use **Attach EPUB for KOReader** with
+   the same EPUB.
+3. In KOReader, add a catalogue (OPDS): URL `https://<your-site>/opds`, any
+   user name, `KOREADER_PASSWORD` as password. Download books from there:
+   KOReader matches a book by its exact bytes, so use these copies.
+4. In KOReader, _Progress sync_ → _Custom sync server_:
+   `https://<your-site>/kosync` (no trailing slash), then _Login_ (not
+   Register) with any user name and the same password. Turn on automatic sync
+   if you like.
+
+When KOReader has a newer position, the InkBeacon reader offers to continue
+from there; it never moves you by itself. When you move to another section in
+InkBeacon, KOReader can jump to the start of it (the sync is per section).
+
 ## AI disclaimer
 
 This code was automated in various steps, but with inspection so close I

@@ -1,6 +1,7 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 
 import { findSource, isValidSourceId } from '@/lib/courses';
+import { isKosyncConfigured } from '@/lib/kosync-auth';
 import { readRegistry } from '@/lib/registry';
 import {
   hasStudioSession,
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
       onBeforeGenerateToken: async (pathname) => {
         if (!(await hasStudioSession())) throw new Error('Access required.');
         const match =
-          /^studio\/books\/([^/]+)\/(book\.json|media\/([^/]+))$/.exec(
+          /^studio\/books\/([^/]+)\/(book\.json|original\.epub|media\/([^/]+))$/.exec(
             pathname,
           );
         const id = match?.[1] ?? '';
@@ -49,6 +50,20 @@ export async function POST(request: Request) {
             (!MEDIA.test(mediaName) || !mediaName.startsWith(`${id}-`)))
         ) {
           throw new Error('This upload path is not allowed.');
+        }
+        // the original EPUB, kept for KOReader's catalogue: may be attached
+        // to a book already in the library, and only replaces that file
+        if (match[2] === 'original.epub') {
+          if (!isKosyncConfigured()) {
+            throw new Error('KOReader support is not enabled.');
+          }
+          return {
+            allowedContentTypes: ['application/epub+zip'],
+            maximumSizeInBytes: 500 * MB,
+            addRandomSuffix: false,
+            allowOverwrite: true,
+            cacheControlMaxAge: 60,
+          };
         }
         if (findSource(await readRegistry(), id)) {
           throw new Error(`A book with the id "${id}" already exists.`);

@@ -21,6 +21,18 @@ export type Source = {
   total: number;
   /** true when the full text exists and can be read in the app. */
   readable: boolean;
+  /**
+   * KOReader's ids for this book's EPUB, for progress sync: the partial MD5
+   * of the file ("binary" matching, KOReader's default) and the MD5 of its
+   * file name ("filename" matching). See `lib/md5.ts`.
+   */
+  koreaderDigest?: string;
+  koreaderFilenameDigest?: string;
+  /**
+   * Set when the original EPUB is stored (`studio/books/<id>/original.epub`)
+   * for KOReader's catalogue: the file name it's served under.
+   */
+  originalName?: string;
 };
 
 export type Course = {
@@ -149,7 +161,15 @@ function parseSource(value: unknown): Source | null {
     !Number.isInteger(total) ||
     (total as number) < 0 ||
     (total as number) > 100_000 ||
-    typeof item.readable !== 'boolean'
+    typeof item.readable !== 'boolean' ||
+    !isOptionalDigest(item.koreaderDigest) ||
+    !isOptionalDigest(item.koreaderFilenameDigest) ||
+    !(
+      item.originalName === undefined ||
+      (typeof item.originalName === 'string' &&
+        item.originalName.length > 0 &&
+        safeFileName(item.originalName) === item.originalName)
+    )
   ) {
     return null;
   }
@@ -162,7 +182,46 @@ function parseSource(value: unknown): Source | null {
     unit,
     total: total as number,
     readable: item.readable,
+    ...(item.koreaderDigest
+      ? { koreaderDigest: item.koreaderDigest as string }
+      : {}),
+    ...(item.koreaderFilenameDigest
+      ? { koreaderFilenameDigest: item.koreaderFilenameDigest as string }
+      : {}),
+    ...(item.originalName ? { originalName: item.originalName as string } : {}),
   };
+}
+
+/**
+ * A file name safe to send in Content-Disposition: control characters,
+ * quotes and slashes become "_", at most 200 characters.
+ */
+export function safeFileName(name: string) {
+  let out = '';
+  for (let i = 0; i < name.length; i += 1) {
+    const code = name.charCodeAt(i);
+    out +=
+      code < 32 || code === 34 || code === 47 || code === 92 ? '_' : name[i];
+  }
+  return out.slice(-200);
+}
+
+const DIGEST_PATTERN = /^[0-9a-f]{32}$/;
+
+function isOptionalDigest(value: unknown) {
+  return (
+    value === undefined ||
+    (typeof value === 'string' && DIGEST_PATTERN.test(value))
+  );
+}
+
+/** The book a KOReader document id (either kind) refers to. */
+export function findSourceByDigest(registry: Registry, digest: string) {
+  return allSources(registry).find(
+    (source) =>
+      source.koreaderDigest === digest ||
+      source.koreaderFilenameDigest === digest,
+  );
 }
 
 function parseCourse(value: unknown): Course | null {

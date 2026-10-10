@@ -86,7 +86,7 @@ export function importEpub(
   let section = 0;
   let label = 'Front matter';
 
-  for (const rel of spine) {
+  for (const [spineIndex, rel] of spine.entries()) {
     const entry = findEntry(files, rel);
     if (!entry) continue;
     const html = decodeText(files.get(entry)!);
@@ -134,6 +134,8 @@ export function importEpub(
       section,
       location: chapter === 0 ? 'Opening' : `${chapter}.${section}`,
       chapterLabel: label,
+      // which file of the EPUB this is: KOReader positions name it
+      spine: spineIndex,
       heading,
       blocks: final,
     });

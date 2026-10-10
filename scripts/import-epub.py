@@ -195,7 +195,7 @@ def main() -> int:
     copied: dict[str, str] = {}           # path in the epub -> emitted file name
     units, chapter, section, label = [], 0, 0, 'Front matter'
 
-    for rel in spine:
+    for spine_index, rel in enumerate(spine):
         try:
             text = src.read(rel).decode('utf-8', 'replace')
         except (KeyError, OSError):
@@ -260,6 +260,8 @@ def main() -> int:
             'section': section,
             'location': 'Opening' if chapter == 0 else f'{chapter}.{section}',
             'chapterLabel': label,
+            # which file of the EPUB this is: KOReader positions name it
+            'spine': spine_index,
             'heading': heading,
             'blocks': final,
         })

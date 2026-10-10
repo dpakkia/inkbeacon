@@ -27,6 +27,12 @@ export type ReadingUnit = {
   chapter: number;
   section: number;
   groupId?: string;
+  /**
+   * Index (0-based) of the EPUB spine file this unit comes from. KOReader
+   * positions name it as `/body/DocFragment[spine + 1]`. Absent in books
+   * imported before it existed and in single-HTML imports.
+   */
+  spine?: number;
   location: string;
   chapterLabel: string;
   heading: string;

@@ -28,6 +28,19 @@ export default async function Home() {
         hard-to-navigate.
       </p>
 
+      {courses.length === 0 && (
+        <p className="mt-12 rounded-xl border border-dashed border-line p-5 text-sm text-muted-ink">
+          Your library is empty.{' '}
+          <Link
+            href="/library"
+            className="font-medium text-ink underline underline-offset-4"
+          >
+            Add your first book
+          </Link>{' '}
+          to start: a course is created with it.
+        </p>
+      )}
+
       <ul className="mt-12 space-y-3">
         {courses.map((course) => {
           const books = course.sources.filter((s) => s.kind === 'book').length;

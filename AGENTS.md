@@ -179,12 +179,8 @@ details for each step. The app is about **books only**.
 
 ## Infrastructure
 
-- Done 2026-10-09. Vercel project `inkbeacon` (personal scope), connected to
-  the GitHub repo: pushes to `main` deploy to the owner's own site,
-  other branches get previews. `vercel.json` sets the Next.js framework and
-  the `cdg1` function region.
-- Private Blob store a private Blob store (`cdg1`), separate from the private
-  instance's store. It holds the three sample books only.
-- `STUDIO_ACCESS_KEY` is set for Production, Preview and Development; the
-  local copy is in `.env.local` (never print it). `vercel env pull .env.local`
-  refreshes the Blob token.
+The owner's own deployment (Vercel project, Blob store, keys) is described in
+`FIRST_TODO.md` (local, gitignored): it's a personal instance, not a public
+demo, so its address stays out of the repository. `vercel.json` sets the
+Next.js framework and the `cdg1` function region; `.env.local` holds that
+instance's keys (never print them).

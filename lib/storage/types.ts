@@ -66,6 +66,14 @@ export function contentTypeOf(path: string) {
       mp4: 'video/mp4',
       m4v: 'video/mp4',
       webm: 'video/webm',
+      mp3: 'audio/mpeg',
+      m4a: 'audio/mp4',
+      aac: 'audio/aac',
+      ogg: 'audio/ogg',
+      oga: 'audio/ogg',
+      opus: 'audio/ogg',
+      flac: 'audio/flac',
+      wav: 'audio/wav',
     }[ext] ?? 'application/octet-stream'
   );
 }
@@ -77,7 +85,9 @@ export function assertSafePath(path: string) {
     path.length > 512 ||
     path.startsWith('/') ||
     path.split('/').some((part) => !part || part === '.' || part === '..') ||
-    !/^[A-Za-z0-9._/-]+$/.test(path)
+    // spaces too: music files are rarely named without them
+    !/^[A-Za-z0-9._/ -]+$/.test(path) ||
+    path.split('/').some((part) => part !== part.trim())
   ) {
     throw new Error(`Invalid storage path: ${path}`);
   }

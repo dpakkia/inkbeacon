@@ -38,6 +38,56 @@ as **SVG or PNG** from the panel's download button. Diagrams can be switched
 off on the Library page: everywhere, per course, or per book. Switching them
 off hides the panel and keeps what you've drawn.
 
+## Radio channels
+
+The radio button (bottom left of every page) plays three built-in channels:
+**Lofi Girl** (the main live stream), **Jazz** and **GT** (long mixes,
+starting from a random one and looping). ‹ › switch channels, ✕ closes it.
+YouTube's rules require its player to stay visible, so the panel shows it at
+YouTube's minimum size (200×200).
+
+Channels are listed in [`lib/radio.ts`](lib/radio.ts); edit the list to add,
+remove or reorder them.
+
+### From YouTube
+
+Add an entry with the video ids (the part after `watch?v=` in the address):
+
+```ts
+// a live stream: exactly one id
+{ id: 'rain', name: 'Rain', kind: 'youtube', live: true, videos: ['VIDEO_ID'] },
+// videos played one after another, from a random one, looping
+{ id: 'piano', name: 'Piano', kind: 'youtube', videos: ['ID_1', 'ID_2', 'ID_3'] },
+```
+
+The videos must allow embedding. Live streams get a new id when the channel
+restarts them; `node scripts/check-radio.mjs` lists anything that stopped
+working.
+
+### Your own music
+
+Your files stay private, in your storage next to your books (never in the
+repository), and only play once you've unlocked InkBeacon.
+
+1. Upload a folder of audio files (mp3, m4a, aac, ogg, opus, flac, wav) to a
+   channel folder, here `my-music`:
+
+   ```bash
+   node --env-file=.env.local scripts/upload-music.mjs ~/Music/study my-music
+   ```
+
+   With folder storage you can also copy the files straight into
+   `<STORAGE_DIR>/studio/music/my-music/`.
+
+2. Add the channel to `lib/radio.ts`:
+
+   ```ts
+   { id: 'my-music', name: 'My music', kind: 'audio', folder: 'my-music' },
+   ```
+
+Tracks play in name order, starting from a random one. Only use music you
+have the right to play.
+
 ## Getting started
 
 [![Deploy with Vercel](https://vercel.com/button)](<https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdpakkia%2Finkbeacon&project-name=inkbeacon&repository-name=inkbeacon&env=STUDIO_ACCESS_KEY&envDescription=A%20long%20random%20key%20that%20unlocks%20your%20library%20(e.g.%20openssl%20rand%20-base64%2036)&envLink=https%3A%2F%2Fgithub.com%2Fdpakkia%2Finkbeacon%2Fblob%2Fmain%2FINSTALL.md%23environment-variables&stores=%5B%7B%22type%22%3A%22blob%22%2C%22access%22%3A%22private%22%7D%5D>)

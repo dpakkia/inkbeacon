@@ -2,7 +2,8 @@
  * What may be uploaded where, for every storage backend alike.
  *
  * Allowed paths: `studio/books/<id>/book.json`, `.../media/<id>-0000.<ext>`,
- * and `.../original.epub` (KOReader support only). A book already in the
+ * `.../original.epub` (KOReader support only), and radio music under
+ * `studio/music/<folder>/`. A book already in the
  * library can't be overwritten, unless `replace` is asked for explicitly (the
  * CLI's --replace, to re-import a book's text); its original EPUB can always
  * be attached or replaced.
@@ -27,6 +28,17 @@ export async function uploadPolicy(
   pathname: string,
   options: { replace?: boolean } = {},
 ): Promise<UploadPolicy> {
+  // your own music for an audio radio channel (scripts/upload-music.mjs)
+  const music =
+    /^studio\/music\/([a-z0-9][a-z0-9_-]{0,59})\/([A-Za-z0-9._ -]{1,200})$/.exec(
+      pathname,
+    );
+  if (music) {
+    if (music[2].startsWith('.') || music[2] !== music[2].trim())
+      throw new UploadRefusedError('This file name is not allowed.');
+    return { contentTypes: ['audio/*'], maxBytes: 500 * MB };
+  }
+
   const match =
     /^studio\/books\/([^/]+)\/(book\.json|original\.epub|media\/([^/]+))$/.exec(
       pathname,

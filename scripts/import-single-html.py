@@ -68,6 +68,7 @@ def main() -> int:
     media_dir = args.out / 'media' / args.id
     media_dir.mkdir(parents=True, exist_ok=True)
     copied: dict[str, str] = {}
+    missing = 0
 
     units, part, section = [], 0, 0
     label = 'Front matter'
@@ -109,15 +110,29 @@ def main() -> int:
             if '_media' not in b:
                 final.append(b)
                 continue
-            rel = posixpath.normpath(b['_media'])
-            source_file = args.folder / rel
-            ext = rel.rsplit('.', 1)[-1].lower()
-            if ext not in epub.MEDIA_EXT or not source_file.exists():
-                continue
-            if rel not in copied:
-                name = f'{args.id}-{len(copied):04d}.{ext}'
-                shutil.copy2(source_file, media_dir / name)
-                copied[rel] = name
+            if b['_media'].startswith('data:'):
+                # an image embedded in the page
+                rel = b['_media']
+                embedded = epub.data_uri(rel)
+                if not embedded:
+                    missing += 1
+                    continue
+                ext, data = embedded
+                if rel not in copied:
+                    name = f'{args.id}-{len(copied):04d}.{ext}'
+                    (media_dir / name).write_bytes(data)
+                    copied[rel] = name
+            else:
+                rel = posixpath.normpath(b['_media'])
+                source_file = args.folder / rel
+                ext = rel.rsplit('.', 1)[-1].lower()
+                if ext not in epub.MEDIA_EXT or not source_file.exists():
+                    missing += 1
+                    continue
+                if rel not in copied:
+                    name = f'{args.id}-{len(copied):04d}.{ext}'
+                    shutil.copy2(source_file, media_dir / name)
+                    copied[rel] = name
             block = {'kind': b['kind'],
                      'src': f'/api/books/{args.id}/media/{copied[rel]}'}
             if b['kind'] == 'image':
@@ -159,6 +174,8 @@ def main() -> int:
     print(f'{args.id}: {len(units)} units, {part} parts')
     print(f'  blocks: {", ".join(f"{k}={v}" for k, v in sorted(kinds.items()))}')
     print(f'  media: {len(copied)} files, {size:.1f} MB')
+    if missing:
+        print(f'  left out: {missing} images or videos not in the folder (remote or missing files)')
     print(f'  json: {out.stat().st_size / 1048576:.1f} MB -> {out}')
     return 0
 

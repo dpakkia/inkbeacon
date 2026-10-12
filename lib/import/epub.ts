@@ -120,10 +120,7 @@ export function importEpub(
         final.push(block);
         continue;
       }
-      const resolved = media.resolve(
-        block,
-        joinPath(dirname(entry), block.media),
-      );
+      const resolved = media.resolve(block, dirname(entry));
       if (resolved) final.push(resolved);
     }
     if (!final.length) continue;
@@ -166,5 +163,6 @@ export function importEpub(
       units,
     },
     media: media.files,
+    missing: media.missing,
   };
 }

@@ -12,7 +12,6 @@ import {
   decodeText,
   dirname,
   extractBlocks,
-  joinPath,
   MediaCollector,
   type ImportResult,
 } from '@/lib/import/common';
@@ -138,7 +137,7 @@ export function importSingleHtml(
         final.push(block);
         continue;
       }
-      const resolved = media.resolve(block, joinPath(base, block.media));
+      const resolved = media.resolve(block, base);
       if (resolved) final.push(resolved);
     }
     if (!final.length) continue;
@@ -167,5 +166,6 @@ export function importSingleHtml(
       units,
     },
     media: media.files,
+    missing: media.missing,
   };
 }

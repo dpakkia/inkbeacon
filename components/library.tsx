@@ -873,7 +873,7 @@ function UploadForm({
         });
       }
 
-      const { book, media } = result;
+      const { book, media, missing } = result;
       let done = 0;
       for (let i = 0; i < media.length; i += 4) {
         await Promise.all(
@@ -928,7 +928,10 @@ function UploadForm({
       )) as Registry;
 
       setStatus(
-        `Added “${title.trim()}”: ${book.unitCount} sections in ${book.chapterCount} chapters, ${media.length} images or videos.`,
+        `Added “${title.trim()}”: ${book.unitCount} sections in ${book.chapterCount} chapters, ${media.length} images or videos.` +
+          (missing
+            ? ` ${missing} ${missing === 1 ? 'image or video was' : 'images or videos were'} left out: not in the file (a web link, or missing from the .zip).`
+            : ''),
       );
       setFile(null);
       setIdEdited(false);

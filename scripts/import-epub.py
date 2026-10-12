@@ -13,6 +13,7 @@ already-extracted directory.
 from __future__ import annotations
 
 import argparse
+import base64
 import html
 import json
 import posixpath
@@ -22,7 +23,7 @@ import sys
 import zipfile
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import unquote, unquote_to_bytes
 
 BLOCK_TAGS = {
     'h1': 'heading', 'h2': 'heading', 'h3': 'heading', 'h4': 'heading',
@@ -30,6 +31,12 @@ BLOCK_TAGS = {
 }
 SKIP_TAGS = {'style', 'script', 'noscript', 'svg', 'head'}
 MEDIA_EXT = {'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'mp4', 'm4v', 'webm'}
+# media embedded in the page (data: URIs), by type
+DATA_TYPES = {
+    'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif',
+    'image/webp': 'webp', 'image/svg+xml': 'svg', 'video/mp4': 'mp4',
+    'video/webm': 'webm',
+}
 # Textbooks number chapters in digits, in words or in Roman numerals: all are
 # needed. Both English and Italian headings are recognised.
 ORDINALS = {
@@ -73,6 +80,20 @@ def chapter_number(text: str) -> int | None:
 
 def clean(value: str) -> str:
     return re.sub(r'\s+', ' ', html.unescape(value).replace('\xa0', ' ')).strip()
+
+
+def data_uri(uri: str) -> tuple[str, bytes] | None:
+    """Extension and bytes of a data: URI image or video, or None."""
+    m = re.match(r'data:([^;,]*)((?:;[^;,]*)*),(.*)$', uri, re.S)
+    ext = DATA_TYPES.get(m.group(1).lower()) if m else None
+    if not ext:
+        return None
+    try:
+        if m.group(2).lower().endswith(';base64'):
+            return ext, base64.b64decode(re.sub(r'\s+', '', m.group(3)), validate=True)
+        return ext, unquote_to_bytes(m.group(3))
+    except ValueError:
+        return None
 
 
 class EpubSource:
@@ -119,7 +140,8 @@ class Document(HTMLParser):
 
         if tag in ('img', 'video', 'source'):
             src = a.get('src') or a.get('href')
-            if src and not src.startswith(('data:', 'http://', 'https://')):
+            # remote ones too: the caller counts what it can't resolve
+            if src:
                 self.media.append(src)
                 self.blocks.append({
                     '_media': src,
@@ -193,6 +215,7 @@ def main() -> int:
     media_dir.mkdir(parents=True, exist_ok=True)
 
     copied: dict[str, str] = {}           # path in the epub -> emitted file name
+    missing = 0                           # media references that couldn't be resolved
     units, chapter, section, label = [], 0, 0, 'Front matter'
 
     for spine_index, rel in enumerate(spine):
@@ -233,17 +256,27 @@ def main() -> int:
             if '_media' not in b:
                 final.append(b)
                 continue
-            target = posixpath.normpath(posixpath.join(
-                posixpath.dirname(rel), re.split(r'[?#]', b['_media'])[0]))
-            # hrefs may be URL-encoded ("pic%201.png" for "pic 1.png")
-            if not src.exists(target) and src.exists(unquote(target)):
-                target = unquote(target)
-            ext = target.rsplit('.', 1)[-1].lower()
-            if ext not in MEDIA_EXT or not src.exists(target):
-                continue
+            if b['_media'].startswith('data:'):
+                target = b['_media']
+                embedded = data_uri(target)
+                if not embedded:
+                    missing += 1
+                    continue
+                ext, data = embedded
+            else:
+                target = posixpath.normpath(posixpath.join(
+                    posixpath.dirname(rel), re.split(r'[?#]', b['_media'])[0]))
+                # hrefs may be URL-encoded ("pic%201.png" for "pic 1.png")
+                if not src.exists(target) and src.exists(unquote(target)):
+                    target = unquote(target)
+                ext = target.rsplit('.', 1)[-1].lower()
+                if ext not in MEDIA_EXT or not src.exists(target):
+                    missing += 1
+                    continue
+                data = None
             if target not in copied:
                 name = f'{args.id}-{len(copied):04d}.{ext}'
-                (media_dir / name).write_bytes(src.read(target))
+                (media_dir / name).write_bytes(data if data is not None else src.read(target))
                 copied[target] = name
             block = {'kind': b['kind'],
                      'src': f'/api/books/{args.id}/media/{copied[target]}'}
@@ -299,6 +332,8 @@ def main() -> int:
     print(f'{args.id}: {len(units)} units, {chapter} chapters')
     print(f'  blocks: {", ".join(f"{k}={v}" for k, v in sorted(kinds.items()))}')
     print(f'  media: {len(copied)} files, {size:.1f} MB -> {media_dir}')
+    if missing:
+        print(f'  left out: {missing} images or videos not in the book (remote or missing files)')
     print(f'  json: {out.stat().st_size / 1048576:.1f} MB -> {out}')
     return 0
 

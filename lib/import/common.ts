@@ -14,6 +14,8 @@ export type MediaFile = { name: string; data: Uint8Array; contentType: string };
 export type ImportResult = {
   book: ReadingCollection;
   media: MediaFile[];
+  /** Media references left out: remote, missing, or of an unknown type. */
+  missing: number;
 };
 
 const BLOCK_TAGS: Record<string, ReadingBlock['kind']> = {
@@ -70,7 +72,8 @@ export function extractBlocks(html: string): RawBlock[] {
 
       if (MEDIA_TAGS.has(tag)) {
         const src = element.getAttribute('src') ?? element.getAttribute('href');
-        if (src && !/^(data:|https?:\/\/)/i.test(src)) {
+        // remote ones too: the collector counts what it can't resolve
+        if (src) {
           out.push({
             kind: tag === 'img' ? 'image' : 'video',
             media: src,
@@ -239,12 +242,36 @@ export function findEntry(files: Map<string, Uint8Array>, path: string) {
   return null;
 }
 
+/** Extension, type and bytes of a `data:` URI image or video, or null. */
+export function decodeDataUri(uri: string) {
+  const match = /^data:([^;,]*)((?:;[^;,]*)*),([\s\S]*)$/.exec(uri);
+  const contentType = match?.[1].toLowerCase() ?? '';
+  // the first extension listed for the type (jpg, mp4)
+  const ext = Object.keys(MEDIA_TYPES).find(
+    (key) => MEDIA_TYPES[key] === contentType,
+  );
+  if (!match || !ext) return null;
+  try {
+    const data = /;base64$/i.test(match[2])
+      ? Uint8Array.from(atob(match[3].replace(/\s+/g, '')), (c) =>
+          c.charCodeAt(0),
+        )
+      : new TextEncoder().encode(decodeURIComponent(match[3]));
+    return { ext, contentType, data };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Copies referenced media once each and rewrites blocks to point at the
- * served path, `/api/books/<id>/media/<id>-0000.<ext>`.
+ * served path, `/api/books/<id>/media/<id>-0000.<ext>`. Media embedded in
+ * the page (`data:` URIs) become files too; anything else that can't be
+ * found is counted in `missing`.
  */
 export class MediaCollector {
   readonly files: MediaFile[] = [];
+  missing = 0;
   private readonly byPath = new Map<string, string>();
 
   constructor(
@@ -252,19 +279,22 @@ export class MediaCollector {
     private readonly archive: Map<string, Uint8Array>,
   ) {}
 
-  resolve(block: RawBlock, path: string): ReadingBlock | null {
-    const entry = findEntry(this.archive, path);
-    const ext = entry?.split('.').pop()?.toLowerCase() ?? '';
-    if (!entry || !MEDIA_TYPES[ext]) return null;
-    let name = this.byPath.get(entry);
+  /** `base` is the folder of the document the block comes from. */
+  resolve(block: RawBlock, base: string): ReadingBlock | null {
+    const raw = block.media ?? '';
+    const key = raw.startsWith('data:')
+      ? raw
+      : findEntry(this.archive, joinPath(base, raw));
+    let name = key ? this.byPath.get(key) : undefined;
     if (!name) {
-      name = `${this.bookId}-${String(this.files.length).padStart(4, '0')}.${ext}`;
-      this.files.push({
-        name,
-        data: this.archive.get(entry)!,
-        contentType: MEDIA_TYPES[ext],
-      });
-      this.byPath.set(entry, name);
+      const file = key ? this.load(key) : null;
+      if (!file) {
+        this.missing += 1;
+        return null;
+      }
+      name = `${this.bookId}-${String(this.files.length).padStart(4, '0')}.${file.ext}`;
+      this.files.push({ name, data: file.data, contentType: file.contentType });
+      this.byPath.set(key!, name);
     }
     const resolved: ReadingBlock = {
       kind: block.kind,
@@ -272,6 +302,17 @@ export class MediaCollector {
     };
     if (block.kind === 'image') resolved.alt = block.alt || DEFAULT_IMAGE_ALT;
     return resolved;
+  }
+
+  private load(key: string) {
+    if (key.startsWith('data:')) return decodeDataUri(key);
+    const ext = key.split('.').pop()?.toLowerCase() ?? '';
+    if (!MEDIA_TYPES[ext]) return null;
+    return {
+      ext,
+      contentType: MEDIA_TYPES[ext],
+      data: this.archive.get(key)!,
+    };
   }
 }
 

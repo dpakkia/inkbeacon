@@ -9,6 +9,12 @@ course list) in one **storage**, chosen with environment variables:
 | Vercel Blob   | Vercel                              | Connect a **private** Blob store; Vercel sets `BLOB_READ_WRITE_TOKEN` |
 | S3-compatible | Netlify, or any host without a disk | `STORAGE=s3` + the `S3_*` variables below                             |
 
+Tested so far: **Vercel** and the **folder** storage (including the exact
+server the Docker image runs, started without Docker). **S3/R2 (Netlify)**
+and the **Docker image itself** are written to the same standard but haven't
+been run end to end yet: if you try them, please open an issue with how it
+went.
+
 Pick a path:
 
 - [Vercel](#vercel-one-click): one click, free tier is enough
@@ -53,6 +59,8 @@ and a Blob store, and asks for `STUDIO_ACCESS_KEY`.
 
 ## Netlify
 
+> Not tested end to end yet (S3 storage and Netlify).
+
 Netlify runs Next.js 16 with no configuration, but has no disk, so use an
 S3-compatible bucket. Cloudflare R2 is a good fit (no egress fees):
 
@@ -80,6 +88,9 @@ Books are uploaded straight from your browser to the bucket, so Netlify's
 request-size limits don't apply. The same S3 setup works on any other host.
 
 ## Docker, Coolify, home server
+
+> The image hasn't been built and run yet; the server it contains has been
+> tested on its own.
 
 Data lives in a Docker volume. You need Docker with Compose.
 

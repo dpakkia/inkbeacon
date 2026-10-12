@@ -1,5 +1,3 @@
-import { head } from '@vercel/blob';
-
 import {
   findCourse,
   findSource,
@@ -15,6 +13,7 @@ import {
   requireLibraryAccess,
 } from '@/lib/library-api';
 import { updateRegistry } from '@/lib/registry';
+import { getStorage } from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -39,9 +38,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const uploaded = await head(`studio/books/${id}/book.json`).catch(
-      () => null,
-    );
+    const uploaded = await getStorage().head(`studio/books/${id}/book.json`);
     if (!uploaded) {
       throw new LibraryError('The book file was not uploaded.', 400);
     }

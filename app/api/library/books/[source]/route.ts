@@ -1,5 +1,3 @@
-import { del, list } from '@vercel/blob';
-
 import { findSource, isValidSourceId } from '@/lib/courses';
 import {
   LibraryError,
@@ -7,6 +5,7 @@ import {
   requireLibraryAccess,
 } from '@/lib/library-api';
 import { readRegistry, updateRegistry } from '@/lib/registry';
+import { getStorage } from '@/lib/storage';
 import {
   readState,
   scopeOf,
@@ -19,7 +18,7 @@ export const runtime = 'nodejs';
 
 /**
  * Deletes a book for good: its entry in the library, its highlights,
- * progress, ticks and diagrams, then its file and media in Blob.
+ * progress, ticks and diagrams, then its file and media in storage.
  * The body must repeat the id (`{ "confirm": "<id>" }`), which the library
  * page asks the user to type.
  *
@@ -71,20 +70,10 @@ export async function DELETE(
     }
 
     // 3. its files
-    let removed = 0;
-    let cursor: string | undefined;
-    do {
-      const page = await list({
-        prefix: `studio/books/${id}/`,
-        cursor,
-        limit: 1000,
-      });
-      if (page.blobs.length) {
-        await del(page.blobs.map((blob) => blob.pathname));
-        removed += page.blobs.length;
-      }
-      cursor = page.hasMore ? page.cursor : undefined;
-    } while (cursor);
+    const storage = getStorage();
+    const files = await storage.list(`studio/books/${id}/`);
+    await storage.delete(files);
+    const removed = files.length;
 
     return Response.json({ registry, removedFiles: removed });
   } catch (error) {

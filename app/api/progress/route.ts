@@ -12,7 +12,7 @@ import { readRegistry } from '@/lib/registry';
 import { readState, scopeOf } from '@/lib/study-state';
 import {
   hasStudioAccess,
-  isBlobConfigured,
+  isStorageConfigured,
   isStudioConfigured,
 } from '@/lib/studio-auth';
 
@@ -38,7 +38,7 @@ function sum(shares: Share[]): Share {
 }
 
 export async function GET(request: Request) {
-  if (!isStudioConfigured() || !isBlobConfigured()) {
+  if (!isStudioConfigured() || !isStorageConfigured()) {
     return Response.json(
       { error: 'Server sync is not configured.' },
       { status: 503 },

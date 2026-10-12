@@ -28,11 +28,8 @@ export function isStudioConfigured() {
   return Boolean(getAccessKey());
 }
 
-export function isBlobConfigured() {
-  return Boolean(
-    process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID,
-  );
-}
+/** Some storage backend is configured (see lib/storage). */
+export { isStorageConfigured } from '@/lib/storage';
 
 export function isValidAccessKey(candidate: string) {
   const accessKey = getAccessKey();
@@ -46,24 +43,36 @@ export async function hasStudioSession() {
   return safeEqual(session, getSessionValue(accessKey));
 }
 
-export async function createStudioSession() {
+/**
+ * Whether the request came over HTTPS (directly, or through Vercel or a
+ * reverse proxy). The session cookie is marked Secure only then: a server on
+ * a home network over plain HTTP must still be able to log in.
+ */
+export function isHttpsRequest(request: Request) {
+  return (
+    new URL(request.url).protocol === 'https:' ||
+    request.headers.get('x-forwarded-proto')?.split(',')[0].trim() === 'https'
+  );
+}
+
+export async function createStudioSession(secure: boolean) {
   const accessKey = getAccessKey();
   if (!accessKey) return;
   (await cookies()).set(SESSION_COOKIE, getSessionValue(accessKey), {
     httpOnly: true,
     sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
+    secure,
     maxAge: 60 * 60 * 24 * 30,
     path: '/',
     priority: 'high',
   });
 }
 
-export async function clearStudioSession() {
+export async function clearStudioSession(secure: boolean) {
   (await cookies()).set(SESSION_COOKIE, '', {
     httpOnly: true,
     sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
+    secure,
     maxAge: 0,
     path: '/',
   });

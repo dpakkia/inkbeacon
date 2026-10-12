@@ -1,0 +1,20 @@
+# never in the image: secrets, private data, local tooling
+.env*
+!.env.example
+_privato/
+data-private/
+data/
+backup-stato/
+FIRST_TODO.md
+.git/
+.vercel/
+.next/
+node_modules/
+dist/
+work/
+outputs/
+.wrangler/
+.openai/
+scripts/__pycache__/
+*.pyc
+tsconfig.tsbuildinfo

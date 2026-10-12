@@ -37,6 +37,8 @@ next-env.d.ts
 /outputs/
 /work/
 /data-private/
+# folder storage in development (STORAGE_DIR=./data): your books and study
+/data/
 
 # copies of the study state: personal data, they stay local
 /backup-stato/

@@ -2,8 +2,9 @@ import {
   clearStudioSession,
   createStudioSession,
   hasStudioSession,
-  isBlobConfigured,
+  isStorageConfigured,
   isStudioConfigured,
+  isHttpsRequest,
   isValidAccessKey,
 } from '@/lib/studio-auth';
 
@@ -11,13 +12,13 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   return Response.json({
-    configured: isStudioConfigured() && isBlobConfigured(),
+    configured: isStudioConfigured() && isStorageConfigured(),
     authenticated: await hasStudioSession(),
   });
 }
 
 export async function POST(request: Request) {
-  if (!isStudioConfigured() || !isBlobConfigured()) {
+  if (!isStudioConfigured() || !isStorageConfigured()) {
     return Response.json(
       { error: 'Server sync is not configured.' },
       { status: 503 },
@@ -34,11 +35,11 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Invalid key.' }, { status: 401 });
   }
 
-  await createStudioSession();
+  await createStudioSession(isHttpsRequest(request));
   return Response.json({ authenticated: true });
 }
 
-export async function DELETE() {
-  await clearStudioSession();
+export async function DELETE(request: Request) {
+  await clearStudioSession(isHttpsRequest(request));
   return Response.json({ authenticated: false });
 }

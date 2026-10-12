@@ -17,12 +17,13 @@ Built with Next.js, Tailwind and Vercel Blob.
 
 - **Courses and books** are managed from the **Library** page (`/library`):
   add a book, edit titles and courses, move or delete books. The list is
-  stored in the private store (`studio/registry.json`); `lib/courses.ts` only
+  stored with everything else (`studio/registry.json`); `lib/courses.ts` only
   fills it the first time.
 - **Books** don't live in the repository. The library page converts an EPUB
-  or a single-file HTML export in your browser and uploads it straight to a
-  private Vercel Blob store. The app shows a book only after you've entered
-  the key.
+  or a single-file HTML export in your browser and uploads it to your
+  storage: a folder on your server, a private Vercel Blob store, or an
+  S3-compatible bucket. The app shows a book only after you've entered the
+  key.
 - **Your study** (highlights, diagrams, progress) is saved to the same store,
   in `studio/state.json`.
 - **`GET /api/progress`** returns the percentages per course, with
@@ -39,18 +40,18 @@ off hides the panel and keeps what you've drawn.
 
 ## Getting started
 
-You need Node.js 22.13 or later.
+[![Deploy with Vercel](https://vercel.com/button)](<https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdpakkia%2Finkbeacon&project-name=inkbeacon&repository-name=inkbeacon&env=STUDIO_ACCESS_KEY&envDescription=A%20long%20random%20key%20that%20unlocks%20your%20library%20(e.g.%20openssl%20rand%20-base64%2036)&envLink=https%3A%2F%2Fgithub.com%2Fdpakkia%2Finkbeacon%2Fblob%2Fmain%2FINSTALL.md%23environment-variables&stores=%5B%7B%22type%22%3A%22blob%22%2C%22access%22%3A%22private%22%7D%5D>)
+
+Or run it with Docker, on Netlify, or on your own server: **[INSTALL.md](INSTALL.md)**
+covers all of them.
+
+For development you need Node.js 22.13 or later:
 
 ```bash
 npm install
-cp .env.example .env.local   # then pick a long, random key
+cp .env.example .env.local   # set STUDIO_ACCESS_KEY, and STORAGE_DIR=./data
 npm run dev
 ```
-
-To sync and read books you need a private Blob store: create it from the
-Vercel dashboard, connect it to the project and pull the variables with
-`vercel env pull .env.local`. Add `STUDIO_ACCESS_KEY` to the project's
-variables on Vercel too.
 
 ## Adding a book
 
@@ -66,7 +67,9 @@ diagrams and progress, after you type its id to confirm.
 ### From the command line
 
 For bulk imports, the same conversion runs in Python, into `data-private/`
-(which git ignores), and a script uploads the result:
+(which git ignores), and a script uploads the result to a running server
+(`INKBEACON_URL`, default `http://localhost:3000`; it logs in with
+`STUDIO_ACCESS_KEY`):
 
 ```bash
 python3 scripts/import-epub.py book.epub --id my-book \
@@ -77,12 +80,12 @@ python3 scripts/import-single-html.py folder/ --id my-book \
 node --env-file=.env.local scripts/upload-book.mjs my-book --course example-course
 ```
 
-`--pages 240` tracks progress in pages instead of chapters. Without
-`--course` the files are uploaded but the book isn't added to the library
-(useful to replace the text of a book that's already there).
+`--pages 240` tracks progress in pages instead of chapters; `--replace`
+re-uploads the text of a book that's already in the library; `--epub
+book.epub` attaches the original EPUB (KOReader).
 
 The three demo books in `examples/books/` match the example courses; to load
-them into a new store:
+them into a new server:
 
 ```bash
 mkdir -p data-private/books

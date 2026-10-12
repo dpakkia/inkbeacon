@@ -1,5 +1,5 @@
 /**
- * The registry of courses and books, stored in Blob.
+ * The registry of courses and books, in storage (`studio/registry.json`).
  *
  * A missing registry means "not created yet": the seed from `lib/courses.ts`
  * stands in until the first change is saved. Any other failure throws. If a
@@ -7,33 +7,26 @@
  * treat every uploaded book as unknown.
  */
 
-import { BlobPreconditionFailedError, get, put } from '@vercel/blob';
+import { getStorage, PreconditionFailedError, readJson } from '@/lib/storage';
 
 import { parseRegistry, seedRegistry, type Registry } from '@/lib/courses';
-import { isBlobConfigured } from '@/lib/studio-auth';
+import { isStorageConfigured } from '@/lib/studio-auth';
 
 const REGISTRY_PATH = 'studio/registry.json';
 
 type Loaded = { registry: Registry; etag: string | null };
 
 async function load(): Promise<Loaded> {
-  const result = await get(REGISTRY_PATH, {
-    access: 'private',
-    useCache: false,
-  });
-  if (!result) return { registry: seedRegistry(), etag: null };
-  if (result.statusCode !== 200)
-    throw new Error('Unexpected registry response');
-  const registry = parseRegistry(await new Response(result.stream).json());
+  const stored = await readJson(REGISTRY_PATH);
+  if (!stored) return { registry: seedRegistry(), etag: null };
+  const registry = parseRegistry(stored.value);
   if (!registry) throw new Error('The stored registry is malformed');
-  // `get` returns a weak ETag (W/"…"); a conditional `put` only matches the
-  // strong form
-  return { registry, etag: result.blob.etag.replace(/^W\//, '') };
+  return { registry, etag: stored.etag };
 }
 
-/** The current registry; the seed when Blob isn't configured or nothing is stored yet. */
+/** The current registry; the seed when no storage is configured or nothing is stored yet. */
 export async function readRegistry(): Promise<Registry> {
-  if (!isBlobConfigured()) return seedRegistry();
+  if (!isStorageConfigured()) return seedRegistry();
   return (await load()).registry;
 }
 
@@ -55,21 +48,14 @@ export async function updateRegistry(
     });
     if (!next) throw new Error('The changed registry is invalid');
     try {
-      await put(REGISTRY_PATH, JSON.stringify(next), {
-        access: 'private',
-        addRandomSuffix: false,
-        // first write: fail if someone else created it meanwhile
-        allowOverwrite: etag !== null,
-        ...(etag ? { ifMatch: etag } : {}),
-        cacheControlMaxAge: 60,
+      await getStorage().put(REGISTRY_PATH, JSON.stringify(next), {
         contentType: 'application/json',
+        // first write: fail if someone else created it meanwhile
+        ...(etag ? { ifMatch: etag } : { ifNoneMatch: true }),
       });
       return next;
     } catch (error) {
-      const conflict =
-        error instanceof BlobPreconditionFailedError ||
-        (error instanceof Error && /already exists/i.test(error.message));
-      if (!conflict) throw error;
+      if (!(error instanceof PreconditionFailedError)) throw error;
     }
   }
   throw new RegistryConflictError('The registry kept changing; try again.');

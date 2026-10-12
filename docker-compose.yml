@@ -1,0 +1,19 @@
+# InkBeacon with its data in a Docker volume.
+#   1. cp .env.example .env   and set STUDIO_ACCESS_KEY (and SITE_URL)
+#   2. docker compose up -d --build
+#   3. open http://localhost:3000
+services:
+  inkbeacon:
+    build: .
+    ports:
+      - '3000:3000'
+    env_file: .env
+    environment:
+      STORAGE: filesystem
+      STORAGE_DIR: /data
+    volumes:
+      - inkbeacon-data:/data
+    restart: unless-stopped
+
+volumes:
+  inkbeacon-data:

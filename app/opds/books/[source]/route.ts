@@ -1,5 +1,3 @@
-import { get } from '@vercel/blob';
-
 import { findSource } from '@/lib/courses';
 import {
   hasOpdsAccess,
@@ -8,6 +6,7 @@ import {
   opdsUnauthorized,
 } from '@/lib/kosync-auth';
 import { readRegistry } from '@/lib/registry';
+import { getStorage } from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -28,18 +27,15 @@ export async function GET(
     if (!source?.originalName) {
       return new Response('No EPUB stored for this book.', { status: 404 });
     }
-    const result = await get(`studio/books/${id}/original.epub`, {
-      access: 'private',
-      useCache: false,
-    });
-    if (!result || result.statusCode !== 200) {
+    const object = await getStorage().get(`studio/books/${id}/original.epub`);
+    if (!object) {
       return new Response('EPUB not found.', { status: 404 });
     }
     const name = source.originalName;
-    return new Response(result.stream, {
+    return new Response(object.body, {
       headers: {
         'Content-Type': 'application/epub+zip',
-        'Content-Length': String(result.blob.size),
+        'Content-Length': String(object.size),
         'Content-Disposition': `attachment; filename="${name.replace(/[^\x20-\x7e]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}`,
         'Cache-Control': 'private, no-store',
       },

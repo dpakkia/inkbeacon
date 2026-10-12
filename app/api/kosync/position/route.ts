@@ -11,7 +11,7 @@ import {
 import { readRegistry } from '@/lib/registry';
 import {
   hasStudioSession,
-  isBlobConfigured,
+  isStorageConfigured,
   isStudioConfigured,
 } from '@/lib/studio-auth';
 
@@ -25,7 +25,11 @@ function digestsOf(source: Source) {
 }
 
 async function guard() {
-  if (!isKosyncConfigured() || !isStudioConfigured() || !isBlobConfigured()) {
+  if (
+    !isKosyncConfigured() ||
+    !isStudioConfigured() ||
+    !isStorageConfigured()
+  ) {
     return Response.json(
       { error: 'KOReader support is not enabled.' },
       { status: 404 },

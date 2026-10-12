@@ -22,7 +22,6 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { upload } from '@vercel/blob/client';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -49,10 +48,10 @@ import {
   type SourceUnit,
 } from '@/lib/courses';
 import type { ImportResult } from '@/lib/import/common';
+import { uploadFile, type UploadMode } from '@/lib/upload-client';
 
 type Access = 'checking' | 'unconfigured' | 'locked' | 'open';
 const NEW_COURSE = '__new__';
-const UPLOAD_URL = '/api/library/upload';
 
 async function jsonOrError(response: Response) {
   const payload = (await response.json().catch(() => null)) as {
@@ -89,14 +88,17 @@ function forgetLocally(id: string) {
 }
 
 /** Uploads the original EPUB and returns the KOReader fields for the book. */
-async function storeOriginal(id: string, file: File, data?: Uint8Array) {
+async function storeOriginal(
+  id: string,
+  file: File,
+  mode: UploadMode,
+  data?: Uint8Array,
+) {
   const { koreaderFilenameMd5, koreaderPartialMd5 } = await import('@/lib/md5');
   const bytes = data ?? new Uint8Array(await file.arrayBuffer());
-  await upload(`studio/books/${id}/original.epub`, file, {
-    access: 'private',
-    handleUploadUrl: UPLOAD_URL,
+  await uploadFile(`studio/books/${id}/original.epub`, file, {
+    mode,
     contentType: 'application/epub+zip',
-    multipart: file.size > 8 * 1024 * 1024,
   });
   return {
     koreaderDigest: koreaderPartialMd5(bytes),
@@ -150,10 +152,13 @@ function DiagramsSwitch({
 export default function Library({
   initial,
   koreader = false,
+  uploadMode = 'vercel-blob',
 }: {
   initial: Registry;
   /** KOReader support is on: originals are kept for its catalogue and sync. */
   koreader?: boolean;
+  /** How this server's storage takes uploads (see lib/upload-client.ts). */
+  uploadMode?: UploadMode;
 }) {
   const router = useRouter();
   const [access, setAccess] = useState<Access>('checking');
@@ -249,7 +254,7 @@ export default function Library({
     setAttaching(source.id);
     setSaveError('');
     try {
-      const fields = await storeOriginal(source.id, file);
+      const fields = await storeOriginal(source.id, file, uploadMode);
       const courses = registry.courses.map((c) => ({
         ...c,
         sources: c.sources.map((s) =>
@@ -388,6 +393,7 @@ export default function Library({
       <UploadForm
         registry={registry}
         koreader={koreader}
+        uploadMode={uploadMode}
         disabled={dirty}
         onAdded={(next) => applyRegistry(next)}
       />
@@ -775,11 +781,13 @@ type Format = 'epub' | 'html';
 function UploadForm({
   registry,
   koreader,
+  uploadMode,
   disabled,
   onAdded,
 }: {
   registry: Registry;
   koreader: boolean;
+  uploadMode: UploadMode;
   disabled: boolean;
   onAdded: (registry: Registry) => void;
 }) {
@@ -870,15 +878,10 @@ function UploadForm({
       for (let i = 0; i < media.length; i += 4) {
         await Promise.all(
           media.slice(i, i + 4).map(async (m) => {
-            await upload(
+            await uploadFile(
               `studio/books/${id}/media/${m.name}`,
-              new Blob([m.data as BlobPart]),
-              {
-                access: 'private',
-                handleUploadUrl: UPLOAD_URL,
-                contentType: m.contentType,
-                multipart: m.data.byteLength > 8 * 1024 * 1024,
-              },
+              new Blob([m.data as BlobPart], { type: m.contentType }),
+              { mode: uploadMode, contentType: m.contentType },
             );
             done += 1;
             setStatus(`Uploading images and videos… ${done}/${media.length}`);
@@ -889,16 +892,14 @@ function UploadForm({
       let koreaderFields = {};
       if (koreader && format === 'epub') {
         setStatus('Keeping the original EPUB for KOReader…');
-        koreaderFields = await storeOriginal(id, file, data);
+        koreaderFields = await storeOriginal(id, file, uploadMode, data);
       }
 
       setStatus('Uploading the text…');
       const json = JSON.stringify(book);
-      await upload(`studio/books/${id}/book.json`, json, {
-        access: 'private',
-        handleUploadUrl: UPLOAD_URL,
+      await uploadFile(`studio/books/${id}/book.json`, json, {
+        mode: uploadMode,
         contentType: 'application/json',
-        multipart: json.length > 8 * 1024 * 1024,
       });
 
       setStatus('Adding it to the library…');

@@ -1,10 +1,9 @@
-import { get } from '@vercel/blob';
-
 import { findSource } from '@/lib/courses';
 import { readRegistry } from '@/lib/registry';
+import { getStorage } from '@/lib/storage';
 import {
   hasStudioSession,
-  isBlobConfigured,
+  isStorageConfigured,
   isStudioConfigured,
 } from '@/lib/studio-auth';
 
@@ -15,7 +14,7 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ source: string }> },
 ) {
-  if (!isStudioConfigured() || !isBlobConfigured()) {
+  if (!isStudioConfigured() || !isStorageConfigured()) {
     return Response.json(
       { error: 'Book storage is not configured.' },
       { status: 503 },
@@ -33,23 +32,18 @@ export async function GET(
       return Response.json({ error: 'Unknown source.' }, { status: 404 });
     }
 
-    const result = await get(`studio/books/${source}/book.json`, {
-      access: 'private',
-      // straight from storage: a book deleted and uploaded again under the
-      // same id must not come back from the CDN cache
-      useCache: false,
-    });
-    if (!result || result.statusCode !== 200) {
+    const object = await getStorage().get(`studio/books/${source}/book.json`);
+    if (!object) {
       return Response.json({ error: 'Book not found.' }, { status: 404 });
     }
-    return new Response(result.stream, {
+    return new Response(object.body, {
       headers: {
         'Cache-Control': 'private, no-store',
         'Content-Type': 'application/json; charset=utf-8',
       },
     });
   } catch (error) {
-    console.error(`Unable to read "${source}" from Vercel Blob`, error);
+    console.error(`Unable to read "${source}" from storage`, error);
     return Response.json(
       { error: 'Unable to load the book.' },
       { status: 502 },

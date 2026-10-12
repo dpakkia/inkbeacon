@@ -1,12 +1,12 @@
 /**
- * Reading, validating and writing the study document on Vercel Blob.
+ * Reading, validating and writing the study document in storage.
  *
  * This used to live inside the `/api/study-state` route. Since `/api/progress`
  * exists too, two routes read the same document: the parser lives here
  * because neither of them can be the owner of the format.
  */
 
-import { get, put } from '@vercel/blob';
+import { getStorage, readJson } from '@/lib/storage';
 
 import {
   allSources,
@@ -278,14 +278,9 @@ export function parseState(
   };
 }
 
-/** The parsed JSON of a blob; null only when the blob doesn't exist. */
+/** The parsed JSON of an object; null only when it doesn't exist. */
 async function readBlob(pathname: string): Promise<{ value: unknown } | null> {
-  const result = await get(pathname, { access: 'private', useCache: false });
-  if (!result) return null;
-  if (result.statusCode !== 200) {
-    throw new Error(`Unexpected response for ${pathname}`);
-  }
-  return { value: (await new Response(result.stream).json()) as unknown };
+  return readJson(pathname);
 }
 
 /**
@@ -330,11 +325,7 @@ export async function readState(scope: StateScope) {
 }
 
 export async function writeState(state: StudyState) {
-  await put(STORAGE_PATH, JSON.stringify(state), {
-    access: 'private',
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    cacheControlMaxAge: 60,
+  await getStorage().put(STORAGE_PATH, JSON.stringify(state), {
     contentType: 'application/json',
   });
 }

@@ -1,7 +1,7 @@
 import { readRegistry } from '@/lib/registry';
 import {
   hasStudioSession,
-  isBlobConfigured,
+  isStorageConfigured,
   isStudioConfigured,
 } from '@/lib/studio-auth';
 import {
@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 async function requireSession() {
-  if (!isStudioConfigured() || !isBlobConfigured()) {
+  if (!isStudioConfigured() || !isStorageConfigured()) {
     return Response.json(
       { error: 'Server sync is not configured.' },
       { status: 503 },

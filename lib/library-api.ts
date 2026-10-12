@@ -3,7 +3,7 @@
 import { RegistryConflictError } from '@/lib/registry';
 import {
   hasStudioSession,
-  isBlobConfigured,
+  isStorageConfigured,
   isStudioConfigured,
 } from '@/lib/studio-auth';
 
@@ -18,7 +18,7 @@ export class LibraryError extends Error {
 }
 
 export async function requireLibraryAccess() {
-  if (!isStudioConfigured() || !isBlobConfigured()) {
+  if (!isStudioConfigured() || !isStorageConfigured()) {
     return Response.json(
       { error: 'Server storage is not configured.' },
       { status: 503 },

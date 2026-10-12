@@ -2,6 +2,7 @@
 _privato/
 backup-stato/
 data-private/
+data/
 FIRST_TODO.md
 .env*
 !.env.example

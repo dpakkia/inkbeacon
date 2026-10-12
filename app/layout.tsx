@@ -10,9 +10,12 @@ import './globals.css';
 
 import Radio from '@/components/radio';
 
+// the site's public address, for share previews: SITE_URL when self-hosted,
+// Vercel's production domain on Vercel
 const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL;
 const metadataBase = new URL(
-  productionHost ? `https://${productionHost}` : 'http://localhost:3000',
+  process.env.SITE_URL?.trim() ||
+    (productionHost ? `https://${productionHost}` : 'http://localhost:3000'),
 );
 
 export const metadata: Metadata = {

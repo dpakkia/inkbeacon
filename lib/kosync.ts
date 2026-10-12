@@ -8,7 +8,7 @@
  * `device_id` = INKBEACON_DEVICE_ID). Last writer wins, as in kosync itself.
  */
 
-import { BlobPreconditionFailedError, get, put } from '@vercel/blob';
+import { getStorage, PreconditionFailedError, readJson } from '@/lib/storage';
 
 const STORE_PATH = 'studio/kosync.json';
 const MAX_DOCUMENTS = 5_000;
@@ -71,14 +71,11 @@ function parseStore(value: unknown): Store | null {
 }
 
 async function load(): Promise<{ store: Store; etag: string | null }> {
-  const result = await get(STORE_PATH, { access: 'private', useCache: false });
-  if (!result) return { store: { version: 1, documents: {} }, etag: null };
-  if (result.statusCode !== 200)
-    throw new Error('Unexpected kosync store response');
-  const store = parseStore(await new Response(result.stream).json());
+  const stored = await readJson(STORE_PATH);
+  if (!stored) return { store: { version: 1, documents: {} }, etag: null };
+  const store = parseStore(stored.value);
   if (!store) throw new Error('The kosync store is malformed');
-  // `get` returns a weak ETag; a conditional `put` matches only the strong form
-  return { store, etag: result.blob.etag.replace(/^W\//, '') };
+  return { store, etag: stored.etag };
 }
 
 export async function readRecord(document: string) {
@@ -112,20 +109,13 @@ export async function writeRecord(documents: string[], record: KosyncRecord) {
         .forEach((id) => delete store.documents[id]);
     }
     try {
-      await put(STORE_PATH, JSON.stringify(store), {
-        access: 'private',
-        addRandomSuffix: false,
-        allowOverwrite: etag !== null,
-        ...(etag ? { ifMatch: etag } : {}),
-        cacheControlMaxAge: 60,
+      await getStorage().put(STORE_PATH, JSON.stringify(store), {
         contentType: 'application/json',
+        ...(etag ? { ifMatch: etag } : { ifNoneMatch: true }),
       });
       return;
     } catch (error) {
-      const conflict =
-        error instanceof BlobPreconditionFailedError ||
-        (error instanceof Error && /already exists/i.test(error.message));
-      if (!conflict) throw error;
+      if (!(error instanceof PreconditionFailedError)) throw error;
     }
   }
   throw new Error('The kosync store kept changing');
